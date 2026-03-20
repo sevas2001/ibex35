@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Puerto
-EXPOSE 8000
+EXPOSE 7860
 
-# Arrancar servidor
-CMD ["python", "-m", "uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Arrancar servidor (puerto 7860 requerido por Hugging Face Spaces)
+CMD ["python", "-m", "uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "7860"]
