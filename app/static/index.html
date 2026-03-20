@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IBEX 35 — Predictor LSTM</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a1f2e 0%, #0f1117 100%);
+      border-bottom: 1px solid #2d3748;
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header .logo { font-size: 1.6rem; font-weight: 700; color: #63b3ed; }
+    header .subtitle { font-size: 0.85rem; color: #718096; }
+
+    .badge {
+      background: #2d3748;
+      color: #63b3ed;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .card h2 {
+      font-size: 0.9rem;
+      color: #a0aec0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+    }
+
+    .stat-value { font-size: 2rem; font-weight: 700; color: #e2e8f0; }
+    .stat-label { font-size: 0.8rem; color: #718096; margin-top: 0.25rem; }
+
+    .stat-up   { color: #68d391; }
+    .stat-down { color: #fc8181; }
+
+    .chart-container { position: relative; height: 300px; }
+
+    .pred-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .pred-table th {
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      border-bottom: 1px solid #2d3748;
+      color: #a0aec0;
+      font-weight: 600;
+    }
+    .pred-table td {
+      padding: 0.6rem 0.8rem;
+      border-bottom: 1px solid #1e2535;
+    }
+    .pred-table tr:last-child td { border-bottom: none; }
+
+    .metrics-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .metrics-table th {
+      text-align: left;
+      padding: 0.5rem 0.8rem;
+      border-bottom: 1px solid #2d3748;
+      color: #a0aec0;
+    }
+    .metrics-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #1e2535; }
+    .metrics-table tr:last-child td { border-bottom: none; }
+
+    .btn {
+      background: #3182ce;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.2rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #2b6cb0; }
+    .btn:disabled { background: #2d3748; color: #718096; cursor: not-allowed; }
+
+    .days-selector { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .days-btn {
+      background: #2d3748;
+      color: #a0aec0;
+      border: none;
+      border-radius: 6px;
+      padding: 0.3rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+    .days-btn.active, .days-btn:hover { background: #3182ce; color: white; }
+
+    .disclaimer {
+      font-size: 0.75rem;
+      color: #718096;
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-left: 3px solid #ecc94b;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid #2d3748;
+      border-top-color: #63b3ed;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-ok   { background: #68d391; }
+    .status-fail { background: #fc8181; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">IBEX 35 <span style="color:#a0aec0;font-weight:400">Predictor</span></div>
+    <div class="subtitle">Modelo LSTM — Series Temporales</div>
+  </div>
+  <span class="badge" id="statusBadge">Cargando...</span>
+</header>
+
+<div class="container">
+
+  <!-- KPIs -->
+  <div class="grid-3">
+    <div class="card">
+      <h2>Ultimo precio</h2>
+      <div class="stat-value" id="lastPrice">—</div>
+      <div class="stat-label" id="lastDate">—</div>
+    </div>
+    <div class="card">
+      <h2>Prediccion mañana</h2>
+      <div class="stat-value" id="pred1">—</div>
+      <div class="stat-label" id="pred1Diff">—</div>
+    </div>
+    <div class="card">
+      <h2>Prediccion en 5 dias</h2>
+      <div class="stat-value" id="pred5">—</div>
+      <div class="stat-label" id="pred5Diff">—</div>
+    </div>
+  </div>
+
+  <!-- Gráfico histórico -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <h2>Historico IBEX 35</h2>
+    <div class="days-selector">
+      <button class="days-btn" onclick="loadHistorical(30)">1M</button>
+      <button class="days-btn active" onclick="loadHistorical(90)">3M</button>
+      <button class="days-btn" onclick="loadHistorical(365)">1A</button>
+      <button class="days-btn" onclick="loadHistorical(1825)">5A</button>
+    </div>
+    <div class="chart-container">
+      <canvas id="historicalChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Predicciones + Métricas -->
+  <div class="grid-2">
+
+    <div class="card">
+      <h2>Prediccion proximos 5 dias habiles</h2>
+      <button class="btn" id="predBtn" onclick="loadPredictions()">Actualizar prediccion</button>
+      <br/><br/>
+      <table class="pred-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Prediccion</th>
+            <th>Variacion</th>
+            <th>%</th>
+          </tr>
+        </thead>
+        <tbody id="predTableBody">
+          <tr><td colspan="4" style="color:#718096;padding:1rem 0">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Comparativa de Modelos — Test Set</h2>
+      <table class="metrics-table">
+        <thead>
+          <tr><th>Modelo</th><th>RMSE</th><th>MAE</th><th>MSE</th></tr>
+        </thead>
+        <tbody id="metricsTableBody">
+          <tr><td colspan="4" style="color:#718096">Cargando...</td></tr>
+        </tbody>
+      </table>
+      <br/>
+      <div class="chart-container" style="height:180px">
+        <canvas id="metricsChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Gráfico predicción vs histórico -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <h2>Historico reciente + prediccion a 5 dias</h2>
+    <div class="chart-container" style="height:250px">
+      <canvas id="predChart"></canvas>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <strong>Aviso:</strong> Las predicciones mostradas son el resultado de un modelo de aprendizaje
+    automático con fines académicos y no constituyen asesoramiento financiero.
+    Los mercados bursátiles son impredecibles y los resultados pasados no garantizan rendimientos futuros.
+  </div>
+
+</div>
+
+<script>
+  const API = '';  // mismo origen
+
+  let historicalChart = null;
+  let predChart = null;
+  let metricsChart = null;
+  let historicalData = null;
+  let predData = null;
+
+  // ── Health check ────────────────────────────────────────────────────────
+  async function checkHealth() {
+    try {
+      const res = await fetch(`${API}/health`);
+      const data = await res.json();
+      const badge = document.getElementById('statusBadge');
+      if (data.status === 'ok') {
+        badge.innerHTML = '<span class="status-dot status-ok"></span>Online';
+        badge.style.color = '#68d391';
+      }
+    } catch {
+      document.getElementById('statusBadge').textContent = 'Offline';
+    }
+  }
+
+  // ── Histórico ────────────────────────────────────────────────────────────
+  async function loadHistorical(days = 90) {
+    document.querySelectorAll('.days-btn').forEach(b => b.classList.remove('active'));
+    event?.target?.classList.add('active');
+
+    try {
+      const res = await fetch(`${API}/historical?days=${days}`);
+      historicalData = await res.json();
+
+      const ctx = document.getElementById('historicalChart').getContext('2d');
+      if (historicalChart) historicalChart.destroy();
+
+      historicalChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: historicalData.dates,
+          datasets: [{
+            label: 'IBEX 35',
+            data: historicalData.prices,
+            borderColor: '#63b3ed',
+            backgroundColor: 'rgba(99,179,237,0.08)',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: true,
+            tension: 0.1,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { type: 'time', time: { unit: days <= 90 ? 'week' : 'month' },
+                 grid: { color: '#1e2535' }, ticks: { color: '#718096' } },
+            y: { grid: { color: '#1e2535' }, ticks: { color: '#718096' } },
+          }
+        }
+      });
+
+      // Actualizar último precio
+      const last = historicalData.prices.at(-1);
+      const lastDate = historicalData.dates.at(-1);
+      document.getElementById('lastPrice').textContent = last.toLocaleString('es-ES') + ' pts';
+      document.getElementById('lastDate').textContent = lastDate;
+
+      if (predData) updatePredChart(historicalData, predData);
+    } catch (e) {
+      console.error('Error cargando histórico:', e);
+    }
+  }
+
+  // ── Predicciones ─────────────────────────────────────────────────────────
+  async function loadPredictions() {
+    const btn = document.getElementById('predBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading"></span>Calculando...';
+
+    try {
+      const res = await fetch(`${API}/predict/5days`);
+      predData = await res.json();
+      const preds = predData.predicciones;
+      const lastPrice = predData.ultimo_precio;
+
+      // KPIs
+      const p1 = preds[0];
+      const p5 = preds[4];
+
+      document.getElementById('pred1').textContent = p1.prediccion.toLocaleString('es-ES') + ' pts';
+      document.getElementById('pred1Diff').innerHTML =
+        `<span class="${p1.variacion >= 0 ? 'stat-up' : 'stat-down'}">
+          ${p1.variacion >= 0 ? '+' : ''}${p1.variacion.toFixed(0)} pts (${p1.variacion_pct >= 0 ? '+' : ''}${p1.variacion_pct}%)
+        </span>`;
+
+      document.getElementById('pred5').textContent = p5.prediccion.toLocaleString('es-ES') + ' pts';
+      document.getElementById('pred5Diff').innerHTML =
+        `<span class="${p5.variacion >= 0 ? 'stat-up' : 'stat-down'}">
+          ${p5.variacion >= 0 ? '+' : ''}${p5.variacion.toFixed(0)} pts (${p5.variacion_pct >= 0 ? '+' : ''}${p5.variacion_pct}%)
+        </span>`;
+
+      // Tabla
+      const tbody = document.getElementById('predTableBody');
+      tbody.innerHTML = preds.map(p => `
+        <tr>
+          <td>${p.fecha}</td>
+          <td><strong>${p.prediccion.toLocaleString('es-ES')}</strong></td>
+          <td class="${p.variacion >= 0 ? 'stat-up' : 'stat-down'}">
+            ${p.variacion >= 0 ? '+' : ''}${p.variacion.toFixed(0)}
+          </td>
+          <td class="${p.variacion >= 0 ? 'stat-up' : 'stat-down'}">
+            ${p.variacion_pct >= 0 ? '+' : ''}${p.variacion_pct}%
+          </td>
+        </tr>
+      `).join('');
+
+      if (historicalData) updatePredChart(historicalData, predData);
+    } catch (e) {
+      document.getElementById('predTableBody').innerHTML =
+        '<tr><td colspan="4" style="color:#fc8181">Error al cargar predicciones</td></tr>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Actualizar prediccion';
+    }
+  }
+
+  // ── Gráfico histórico + predicción ───────────────────────────────────────
+  function updatePredChart(hist, pred) {
+    const ctx = document.getElementById('predChart').getContext('2d');
+    if (predChart) predChart.destroy();
+
+    // Últimos 60 días de histórico
+    const n = 60;
+    const histDates  = hist.dates.slice(-n);
+    const histPrices = hist.prices.slice(-n);
+
+    const predDates  = pred.predicciones.map(p => p.fecha);
+    const predPrices = pred.predicciones.map(p => p.prediccion);
+
+    // Punto de unión: último histórico + predicciones
+    const joinDate  = [histDates.at(-1),  ...predDates];
+    const joinPrices = [histPrices.at(-1), ...predPrices];
+
+    predChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'Histórico (60d)',
+            data: histDates.map((d, i) => ({ x: d, y: histPrices[i] })),
+            borderColor: '#63b3ed',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.1,
+          },
+          {
+            label: 'Predicción LSTM',
+            data: joinDate.map((d, i) => ({ x: d, y: joinPrices[i] })),
+            borderColor: '#f6ad55',
+            borderDash: [6, 3],
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: '#f6ad55',
+            tension: 0.3,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#a0aec0' } } },
+        scales: {
+          x: { type: 'time', time: { unit: 'week' },
+               grid: { color: '#1e2535' }, ticks: { color: '#718096' } },
+          y: { grid: { color: '#1e2535' }, ticks: { color: '#718096' } },
+        }
+      }
+    });
+  }
+
+  // ── Métricas ─────────────────────────────────────────────────────────────
+  async function loadMetrics() {
+    try {
+      const res = await fetch(`${API}/metrics`);
+      const data = await res.json();
+      const modelos = data.modelos;
+
+      const tbody = document.getElementById('metricsTableBody');
+      tbody.innerHTML = modelos.map(m => `
+        <tr>
+          <td><strong>${m.Modelo}</strong></td>
+          <td>${m.RMSE.toLocaleString('es-ES')}</td>
+          <td>${m.MAE.toLocaleString('es-ES')}</td>
+          <td>${m.MSE.toLocaleString('es-ES')}</td>
+        </tr>
+      `).join('');
+
+      // Gráfico barras RMSE
+      const ctx = document.getElementById('metricsChart').getContext('2d');
+      if (metricsChart) metricsChart.destroy();
+      metricsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: modelos.map(m => m.Modelo),
+          datasets: [
+            { label: 'RMSE', data: modelos.map(m => m.RMSE),
+              backgroundColor: ['#f6ad55', '#63b3ed'] },
+            { label: 'MAE',  data: modelos.map(m => m.MAE),
+              backgroundColor: ['#fbd38d', '#90cdf4'] },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#a0aec0', font: { size: 11 } } } },
+          scales: {
+            x: { grid: { color: '#1e2535' }, ticks: { color: '#718096' } },
+            y: { grid: { color: '#1e2535' }, ticks: { color: '#718096' } },
+          }
+        }
+      });
+    } catch (e) {
+      console.error('Error métricas:', e);
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  checkHealth();
+  loadHistorical(90);
+  loadPredictions();
+  loadMetrics();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+venv/
+.venv/
+
+# Datos brutos (pesados, no necesarios en producción)
+data/raw/
+data/preprocessed_data.npz
+
+# Gráficos generados
+data/plots/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Los modelos SÍ se incluyen en el repo para el deploy
+# models/lstm_model.keras  <- incluido
+# models/scaler.pkl        <- incluido
+# data/metrics_comparison.csv  <- incluido
+# data/predictions_5days.csv   <- incluido
