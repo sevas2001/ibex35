@@ -69,15 +69,29 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
-def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
-    """Descarga datos recientes del IBEX 35 con caché de 1 hora."""
+def fetch_recent_ibex(days: int = 90) -> pd.Series:
+    """Descarga datos recientes del IBEX 35 con reintentos."""
+    import time
     end = datetime.now()
-    start = end - timedelta(days=days + 30)  # margen extra por festivos
-    data = yf.download("^IBEX", start=start.strftime("%Y-%m-%d"),
-                       end=end.strftime("%Y-%m-%d"), auto_adjust=True, progress=False)
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
-    return data["Close"].dropna()
+    start = end - timedelta(days=days + 30)
+    start_str = start.strftime("%Y-%m-%d")
+    end_str   = end.strftime("%Y-%m-%d")
+
+    for attempt in range(3):
+        try:
+            data = yf.download("^IBEX", start=start_str, end=end_str,
+                               auto_adjust=True, progress=False)
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+            close = data["Close"].dropna()
+            if len(close) > 0:
+                return close
+        except Exception:
+            pass
+        if attempt < 2:
+            time.sleep(2)
+
+    raise HTTPException(status_code=503, detail="No se pudo obtener datos de Yahoo Finance. Intenta de nuevo en unos segundos.")
 
 
 def predict_5days(close_series: pd.Series) -> list:
