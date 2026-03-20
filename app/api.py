@@ -38,6 +38,14 @@ except Exception as e:
     print(f"Advertencia: No se pudo cargar LSTM: {e}")
 
 try:
+    from tensorflow import keras as _keras
+    gru_model = _keras.models.load_model(MODELS_DIR / "gru_model.keras")
+    print("GRU cargado.")
+except Exception as e:
+    gru_model = None
+    print(f"Advertencia: No se pudo cargar GRU: {e}")
+
+try:
     scaler = joblib.load(MODELS_DIR / "scaler.pkl")
     print("Scaler cargado.")
 except Exception as e:
@@ -163,6 +171,7 @@ def health():
     return {
         "status": "ok",
         "lstm_loaded":   lstm_model is not None,
+        "gru_loaded":    gru_model is not None,
         "scaler_loaded": scaler is not None,
         "n_features":    N_FEATURES,
         "timestamp":     datetime.now().isoformat(),
@@ -228,9 +237,60 @@ def get_historical(days: int = 365):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/predict/gru")
+def predict_next_5_days_gru_endpoint():
+    """Genera prediccion a 5 dias usando el modelo GRU."""
+    if gru_model is None or scaler is None:
+        raise HTTPException(status_code=503, detail="Modelo GRU no disponible")
+    try:
+        df = fetch_recent_ibex(days=120)
+        last_price = float(df["Close"].iloc[-1])
+        last_date  = df.index[-1]
+        future_dates = pd.bdate_range(start=last_date, periods=6)[1:]
+
+        features = df[["Close"]].dropna()
+        if len(features) < SEQUENCE_LENGTH:
+            raise HTTPException(status_code=400, detail="Datos insuficientes")
+
+        last_60  = features.values[-SEQUENCE_LENGTH:]
+        scaled   = scaler.transform(last_60)
+        input_seq = scaled.tolist()
+
+        preds_scaled = []
+        for _ in range(5):
+            X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
+            p = float(gru_model.predict(X, verbose=0)[0, 0])
+            preds_scaled.append(p)
+            input_seq.append([p])
+
+        predictions = _inv_close(np.array(preds_scaled)).tolist()
+
+        result = []
+        for date, price in zip(future_dates, predictions):
+            diff = price - last_price
+            result.append({
+                "fecha":         date.strftime("%Y-%m-%d"),
+                "prediccion":    round(price, 2),
+                "variacion":     round(diff, 2),
+                "variacion_pct": round(diff / last_price * 100, 2),
+            })
+
+        return {
+            "modelo":        "GRU",
+            "ultimo_precio": round(last_price, 2),
+            "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
+            "predicciones":  result,
+            "disclaimer":    "Prediccion orientativa. No constituye asesoramiento financiero.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/metrics")
 def get_metrics():
-    """Devuelve metricas comparativas ARIMA vs LSTM."""
+    """Devuelve metricas comparativas ARIMA vs LSTM vs GRU."""
     return {"modelos": metrics_dict}
 
 
