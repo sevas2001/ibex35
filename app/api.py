@@ -25,7 +25,7 @@ DATA_DIR   = BASE_DIR / "data"
 STATIC_DIR = Path(__file__).parent / "static"
 
 SEQUENCE_LENGTH = 60
-N_FEATURES      = 3   # Close, RSI, Crisis
+N_FEATURES      = 1   # Close (univariado)
 
 # ── Startup: cargar modelos ────────────────────────────────────────────────
 print("Cargando modelos...")
@@ -98,24 +98,8 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
 
 
 def _compute_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Anade RSI y Crisis indicator al DataFrame de Close."""
-    close  = df["Close"]
-    delta  = close.diff()
-    gain   = delta.clip(lower=0).rolling(14).mean()
-    loss   = (-delta.clip(upper=0)).rolling(14).mean()
-    rs     = gain / loss
-    result = pd.DataFrame(index=df.index)
-    result["Close"] = close
-    result["RSI"]   = (100 - (100 / (1 + rs))) / 100
-
-    crisis = pd.Series(0.0, index=df.index)
-    crisis[(df.index >= "2008-09-15") & (df.index <= "2009-03-09")] = 1.0
-    crisis[(df.index >= "2011-07-01") & (df.index <= "2012-07-01")] = 0.5
-    crisis[(df.index >= "2020-02-20") & (df.index <= "2020-06-30")] = 1.0
-    crisis[(df.index >= "2022-02-24") & (df.index <= "2022-12-31")] = 0.5
-    result["Crisis"] = crisis
-
-    return result.dropna()
+    """Retorna DataFrame con solo Close (modelo univariado)."""
+    return df[["Close"]].dropna()
 
 
 def _inv_close(scaled_arr: np.ndarray) -> np.ndarray:
@@ -138,16 +122,12 @@ def predict_5days(df: pd.DataFrame) -> list:
     scaled   = scaler.transform(last_60)                   # (60, 3)
     input_seq = scaled.tolist()
 
-    # Features no-precio del ultimo dia (para los dias futuros)
-    last_rsi    = scaled[-1, 1]
-    last_crisis = 0.0   # sin crisis activa actualmente
-
     preds_scaled = []
     for _ in range(5):
         X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
         p = float(lstm_model.predict(X, verbose=0)[0, 0])
         preds_scaled.append(p)
-        input_seq.append([p, last_rsi, last_crisis])
+        input_seq.append([p])
 
     return _inv_close(np.array(preds_scaled)).tolist()
 

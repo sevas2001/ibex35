@@ -7,7 +7,7 @@ from pathlib import Path
 MODELS_DIR  = Path(__file__).parent.parent / "models"
 PLOTS_DIR   = Path(__file__).parent.parent / "data" / "plots"
 SEQUENCE_LENGTH = 60
-N_FEATURES      = 3   # Close, RSI, Crisis
+N_FEATURES      = 1   # Close (univariado)
 
 
 def _inv_close(scaler, arr_1d: np.ndarray) -> np.ndarray:
@@ -127,15 +127,11 @@ def predict_next_5_days(model, last_60_features_scaled: np.ndarray,
     """
     input_seq = last_60_features_scaled.tolist()  # lista de listas [close, vol, rsi, crisis]
 
-    # Features no-precio del ultimo dia conocido
-    last_rsi    = last_60_features_scaled[-1, 1]
-    last_crisis = last_60_features_scaled[-1, 2]
-
     predictions_scaled = []
     for _ in range(5):
         X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
         pred_scaled = float(model.predict(X, verbose=0)[0, 0])
         predictions_scaled.append(pred_scaled)
-        input_seq.append([pred_scaled, last_rsi, last_crisis])
+        input_seq.append([pred_scaled])
 
     return _inv_close(scaler, np.array(predictions_scaled)).tolist()
