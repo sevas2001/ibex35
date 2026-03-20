@@ -16,6 +16,11 @@ data/plots/
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
+# Office exports
+*.pptx
+*.xlsx
+*.docx
+
 # OS
 .DS_Store
 Thumbs.db
