@@ -1,6 +1,6 @@
 """
 IBEX 35 — Backend FastAPI
-Endpoints: /health, /predict/5days, /historical, /metrics
+Endpoints: /health, /predict/5days, /historical, /metrics, /accuracy
 """
 import sys
 import os
@@ -47,6 +47,12 @@ try:
     metrics_dict = metrics_df.to_dict(orient="records")
 except Exception:
     metrics_dict = []
+
+try:
+    from src.prediction_logger import save_prediction, get_accuracy_summary
+    _logger_available = True
+except Exception:
+    _logger_available = False
 
 # ── App ────────────────────────────────────────────────────────────────────
 app = FastAPI(title="IBEX 35 Predictor", version="1.0.0")
@@ -135,6 +141,17 @@ def predict_next_5_days():
                 "variacion_pct": round(diff / last_price * 100, 2),
             })
 
+        # Guardar predicción del día 1 en el log automáticamente
+        if _logger_available and result:
+            try:
+                save_prediction(
+                    precio_base=last_price,
+                    prediccion_d1=result[0]["prediccion"],
+                    fecha=last_date.strftime("%Y-%m-%d"),
+                )
+            except Exception:
+                pass
+
         return {
             "ultimo_precio": round(last_price, 2),
             "ultima_fecha": last_date.strftime("%Y-%m-%d"),
@@ -165,3 +182,14 @@ def get_historical(days: int = 365):
 def get_metrics():
     """Devuelve métricas comparativas ARIMA vs LSTM."""
     return {"modelos": metrics_dict}
+
+
+@app.get("/accuracy")
+def get_accuracy():
+    """Devuelve historial de predicciones vs reales y métricas de accuracy."""
+    if not _logger_available:
+        raise HTTPException(status_code=503, detail="Logger no disponible")
+    try:
+        return get_accuracy_summary()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

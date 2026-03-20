@@ -247,6 +247,40 @@
     </div>
   </div>
 
+  <!-- Accuracy en producción -->
+  <div class="card" style="margin-bottom:1.5rem" id="accuracySection">
+    <h2>Accuracy en Produccion — Predicciones diarias vs Real</h2>
+    <div class="grid-3" style="margin-bottom:1rem">
+      <div>
+        <div class="stat-value" id="dirAccuracy">—</div>
+        <div class="stat-label">% aciertos de direccion</div>
+      </div>
+      <div>
+        <div class="stat-value" id="accMAE">—</div>
+        <div class="stat-label">MAE real (pts)</div>
+      </div>
+      <div>
+        <div class="stat-value" id="accEvaluadas">—</div>
+        <div class="stat-label">dias evaluados</div>
+      </div>
+    </div>
+    <table class="pred-table" id="accuracyTable">
+      <thead>
+        <tr>
+          <th>Fecha prediccion</th>
+          <th>Base</th>
+          <th>Prediccion</th>
+          <th>Real</th>
+          <th>Error</th>
+          <th>Direccion</th>
+        </tr>
+      </thead>
+      <tbody id="accuracyTableBody">
+        <tr><td colspan="6" style="color:#718096;padding:1rem 0">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <div class="disclaimer">
     <strong>Aviso:</strong> Las predicciones mostradas son el resultado de un modelo de aprendizaje
     automático con fines académicos y no constituyen asesoramiento financiero.
@@ -480,11 +514,50 @@
     }
   }
 
+  // ── Accuracy ─────────────────────────────────────────────────────────────
+  async function loadAccuracy() {
+    try {
+      const res = await fetch(`${API}/accuracy`);
+      const data = await res.json();
+
+      if (data.direction_accuracy_pct !== null) {
+        const acc = data.direction_accuracy_pct;
+        document.getElementById('dirAccuracy').textContent = acc + '%';
+        document.getElementById('dirAccuracy').className =
+          'stat-value ' + (acc >= 50 ? 'stat-up' : 'stat-down');
+        document.getElementById('accMAE').textContent = data.mae + ' pts';
+        document.getElementById('accEvaluadas').textContent = data.evaluadas;
+      } else {
+        document.getElementById('dirAccuracy').textContent = 'Sin datos';
+      }
+
+      const tbody = document.getElementById('accuracyTableBody');
+      if (!data.historial || data.historial.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color:#718096">Las predicciones se registran automaticamente. Vuelve manana para ver el primer resultado.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.historial.map(r => `
+        <tr>
+          <td>${r.fecha_prediccion}</td>
+          <td>${Number(r.precio_base).toLocaleString('es-ES')}</td>
+          <td>${Number(r.prediccion_d1).toLocaleString('es-ES')}</td>
+          <td>${r.real_d1 ? Number(r.real_d1).toLocaleString('es-ES') : '<span style="color:#718096">Pendiente</span>'}</td>
+          <td>${r.error_abs ? r.error_abs + ' (' + r.error_pct + '%)' : '—'}</td>
+          <td style="font-size:1.2rem">${r.direction_correct === '1' || r.direction_correct === 1 ? '<span style="color:#68d391">&#10003;</span>' : r.direction_correct === '0' || r.direction_correct === 0 ? '<span style="color:#fc8181">&#10007;</span>' : '—'}</td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      console.error('Error accuracy:', e);
+    }
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
   checkHealth();
   loadHistorical(90);
   loadPredictions();
   loadMetrics();
+  loadAccuracy();
 </script>
 </body>
 </html>
