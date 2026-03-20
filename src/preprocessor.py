@@ -12,20 +12,19 @@ MODELS_DIR = Path(__file__).parent.parent / "models"
 
 SEQUENCE_LENGTH = 60
 TRAIN_RATIO     = 0.80
-N_FEATURES      = 4   # Close, Volume, RSI, Crisis
+N_FEATURES      = 3   # Close, RSI, Crisis
 
 
 def compute_features(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Construye el DataFrame de 4 features para el LSTM multivariate:
+    Construye el DataFrame de 3 features para el LSTM multivariate:
       - Close:  precio de cierre
-      - Volume: volumen de negociacion
       - RSI:    indicador de momentum 14 dias, normalizado a [0, 1]
       - Crisis: variable dummy para periodos de regimen anomalo (0, 0.5, 1)
+    (Volume excluido: datos de indice poco fiables en Yahoo Finance)
     """
     df = pd.DataFrame(index=data.index)
-    df["Close"]  = data["Close"]
-    df["Volume"] = data["Volume"]
+    df["Close"] = data["Close"]
 
     # RSI 14 dias -> normalizado a [0, 1]
     delta = data["Close"].diff()
