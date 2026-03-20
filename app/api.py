@@ -77,17 +77,34 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-# ── Cache en memoria (evita rate limiting de Yahoo Finance) ────────────────
-_cache: dict = {"df": None, "ts": None, "days": None}
-CACHE_TTL = 3600  # segundos (1 hora)
+# ── Cache en memoria ───────────────────────────────────────────────────────
+_cache: dict = {"df": None, "ts": None, "days": None, "source": None}
+CACHE_TTL = 3600  # 1 hora
+
+# ── Pre-cargar CSV histórico como fallback garantizado ─────────────────────
+_RAW_CSV = DATA_DIR / "raw" / "ibex35_raw.csv"
+try:
+    _static_df = pd.read_csv(_RAW_CSV, index_col=0, parse_dates=True)
+    _static_df = _static_df[["Close", "Volume"]].dropna()
+    # Pre-poblar caché con datos históricos (fuente: csv)
+    _cache["df"]     = _static_df
+    _cache["ts"]     = datetime.now() - timedelta(seconds=CACHE_TTL - 60)  # expira en 60s
+    _cache["days"]   = 3650
+    _cache["source"] = "csv"
+    print(f"Fallback CSV cargado: {len(_static_df)} dias hasta {_static_df.index[-1].date()}")
+except Exception as e:
+    print(f"Advertencia: No se pudo cargar CSV fallback: {e}")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
-    """Descarga datos recientes del IBEX 35 con caché de 1 hora."""
+    """
+    Descarga datos del IBEX 35 con caché de 1 hora.
+    Fallback garantizado: si yfinance falla usa el CSV histórico bundleado.
+    """
     now = datetime.now()
 
-    # Devolver caché si está fresco y cubre los días pedidos
+    # Servir caché si está fresco y cubre los días pedidos
     if (_cache["df"] is not None and _cache["ts"] is not None
             and (_cache["days"] or 0) >= days
             and (now - _cache["ts"]).total_seconds() < CACHE_TTL):
@@ -98,7 +115,7 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
     start_str = start.strftime("%Y-%m-%d")
     end_str   = end.strftime("%Y-%m-%d")
 
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             data = yf.download("^IBEX", start=start_str, end=end_str,
                                auto_adjust=True, progress=False)
@@ -106,22 +123,25 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
                 data.columns = data.columns.get_level_values(0)
             df = data[["Close", "Volume"]].dropna()
             if len(df) > 0:
-                _cache["df"]   = df
-                _cache["ts"]   = now
-                _cache["days"] = days
+                _cache["df"]     = df
+                _cache["ts"]     = now
+                _cache["days"]   = days
+                _cache["source"] = "live"
+                print(f"yfinance OK: {len(df)} dias hasta {df.index[-1].date()}")
                 return df
         except Exception:
             pass
-        if attempt < 2:
-            time.sleep(2)
+        if attempt < 4:
+            time.sleep(3)
 
-    # Si falló pero hay caché antiguo, usarlo antes de devolver error
+    # yfinance falló — usar caché existente (CSV o anterior live)
     if _cache["df"] is not None:
+        print("yfinance bloqueado, sirviendo desde caché/CSV")
         return _cache["df"]
 
     raise HTTPException(
         status_code=503,
-        detail="No se pudo obtener datos de Yahoo Finance. Intenta de nuevo en unos segundos."
+        detail="No se pudo obtener datos. Intenta de nuevo en unos minutos."
     )
 
 
@@ -169,11 +189,13 @@ def index():
 @app.get("/health")
 def health():
     return {
-        "status": "ok",
+        "status":        "ok",
         "lstm_loaded":   lstm_model is not None,
         "gru_loaded":    gru_model is not None,
         "scaler_loaded": scaler is not None,
         "n_features":    N_FEATURES,
+        "data_source":   _cache.get("source", "none"),
+        "cache_date":    _cache["df"].index[-1].strftime("%Y-%m-%d") if _cache["df"] is not None else None,
         "timestamp":     datetime.now().isoformat(),
     }
 
