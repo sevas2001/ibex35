@@ -58,10 +58,40 @@ def save_prediction(precio_base: float, prediccion_d1: float,
     print(f"Prediccion guardada: {hoy} -> {prediccion_d1:.2f} pts (base: {precio_base:.2f})")
 
 
+def _load_close_map(min_date: str) -> dict:
+    """
+    Construye un mapa fecha->precio intentando yfinance primero,
+    y usando el CSV histórico bundleado como fallback.
+    """
+    # Intentar yfinance
+    for attempt in range(3):
+        try:
+            recent = yf.download("^IBEX", start=min_date,
+                                 auto_adjust=True, progress=False)
+            if isinstance(recent.columns, pd.MultiIndex):
+                recent.columns = recent.columns.get_level_values(0)
+            if not recent.empty:
+                return {d.strftime("%Y-%m-%d"): float(p)
+                        for d, p in zip(recent.index, recent["Close"])}
+        except Exception:
+            pass
+        if attempt < 2:
+            import time
+            time.sleep(2)
+
+    # Fallback: CSV histórico
+    raw_path = LOG_PATH.parent / "raw" / "ibex35_raw.csv"
+    if raw_path.exists():
+        raw = pd.read_csv(raw_path, index_col=0, parse_dates=True)
+        return {d.strftime("%Y-%m-%d"): float(p)
+                for d, p in zip(raw.index, raw["Close"])}
+    return {}
+
+
 def update_with_real_prices() -> pd.DataFrame:
     """
-    Descarga precios reales de yfinance y rellena las filas pendientes.
-    Se llama automáticamente cada vez que se carga el log.
+    Rellena precios reales en filas pendientes del log.
+    Usa yfinance con fallback al CSV histórico bundleado.
     """
     df = _init_log()
     if df.empty:
@@ -72,16 +102,10 @@ def update_with_real_prices() -> pd.DataFrame:
     if pending.empty:
         return df
 
-    # Descargar datos recientes
     min_date = pending["fecha_prediccion"].min()
-    recent = yf.download("^IBEX", start=min_date, auto_adjust=True, progress=False)
-    if isinstance(recent.columns, pd.MultiIndex):
-        recent.columns = recent.columns.get_level_values(0)
-    if recent.empty:
+    close_map = _load_close_map(min_date)
+    if not close_map:
         return df
-
-    close_map = {d.strftime("%Y-%m-%d"): float(p)
-                 for d, p in zip(recent.index, recent["Close"])}
 
     for idx, row in pending.iterrows():
         fecha = row["fecha_prediccion"]
