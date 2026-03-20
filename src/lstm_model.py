@@ -4,18 +4,30 @@ import joblib
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-MODELS_DIR = Path(__file__).parent.parent / "models"
-PLOTS_DIR = Path(__file__).parent.parent / "data" / "plots"
+MODELS_DIR  = Path(__file__).parent.parent / "models"
+PLOTS_DIR   = Path(__file__).parent.parent / "data" / "plots"
 SEQUENCE_LENGTH = 60
+N_FEATURES      = 4   # Close, Volume, RSI, Crisis
 
 
-def build_lstm(seq_length: int = SEQUENCE_LENGTH) -> object:
-    """Construye la arquitectura LSTM."""
+def _inv_close(scaler, arr_1d: np.ndarray) -> np.ndarray:
+    """
+    Inverse-transform un array 1D de valores Close escalados.
+    El scaler tiene 4 columnas; ponemos la prediccion en col 0 y ceros en el resto.
+    """
+    dummy = np.zeros((len(arr_1d), N_FEATURES))
+    dummy[:, 0] = arr_1d
+    return scaler.inverse_transform(dummy)[:, 0]
+
+
+def build_lstm(seq_length: int = SEQUENCE_LENGTH,
+               n_features: int = N_FEATURES) -> object:
+    """Construye la arquitectura LSTM multivariate."""
     from tensorflow import keras
     from tensorflow.keras import layers
 
     model = keras.Sequential([
-        layers.Input(shape=(seq_length, 1)),
+        layers.Input(shape=(seq_length, n_features)),
         layers.LSTM(100, return_sequences=True),
         layers.Dropout(0.2),
         layers.LSTM(100, return_sequences=False),
@@ -36,7 +48,8 @@ def train_lstm(X_train: np.ndarray, y_train: np.ndarray,
     """
     from tensorflow import keras
 
-    model = build_lstm()
+    n_features = X_train.shape[2]
+    model = build_lstm(n_features=n_features)
 
     callbacks = [
         keras.callbacks.EarlyStopping(
@@ -47,9 +60,7 @@ def train_lstm(X_train: np.ndarray, y_train: np.ndarray,
         ),
     ]
 
-    validation_data = None
-    if X_val is not None:
-        validation_data = (X_val, y_val)
+    validation_data = (X_val, y_val) if X_val is not None else None
 
     print("Entrenando LSTM...")
     history = model.fit(
@@ -74,7 +85,7 @@ def plot_training_history(history) -> None:
     plt.figure(figsize=(10, 4))
     plt.plot(history.history["loss"], label="Train Loss")
     plt.plot(history.history["val_loss"], label="Validation Loss")
-    plt.title("LSTM — Curva de Aprendizaje")
+    plt.title("LSTM — Curva de Aprendizaje (multivariate)")
     plt.xlabel("Epoch")
     plt.ylabel("MSE")
     plt.legend()
@@ -88,15 +99,14 @@ def plot_training_history(history) -> None:
 
 def evaluate_lstm(model, X_test: np.ndarray, y_test: np.ndarray,
                   scaler) -> dict:
-    """Genera predicciones y calcula métricas en escala real (puntos del índice)."""
-    predictions_scaled = model.predict(X_test)
+    """Genera predicciones y calcula metricas en escala real (puntos del indice)."""
+    predictions_scaled = model.predict(X_test).flatten()
 
-    # Invertir normalización para obtener valores reales
-    predictions = scaler.inverse_transform(predictions_scaled).flatten()
-    actuals = scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+    predictions = _inv_close(scaler, predictions_scaled)
+    actuals     = _inv_close(scaler, y_test)
 
-    mse = np.mean((actuals - predictions) ** 2)
-    mae = np.mean(np.abs(actuals - predictions))
+    mse  = np.mean((actuals - predictions) ** 2)
+    mae  = np.mean(np.abs(actuals - predictions))
     rmse = np.sqrt(mse)
 
     print(f"\nLSTM — Metricas en test:")
@@ -108,23 +118,26 @@ def evaluate_lstm(model, X_test: np.ndarray, y_test: np.ndarray,
             "mse": mse, "mae": mae, "rmse": rmse}
 
 
-def predict_next_5_days(model, last_60_days_scaled: np.ndarray, scaler) -> list:
+def predict_next_5_days(model, last_60_features_scaled: np.ndarray,
+                        scaler) -> list:
     """
-    Predicción autoregresiva a 5 días.
-    Cada predicción se usa como input del día siguiente.
+    Prediccion autoregresiva a 5 dias con modelo multivariate.
+    last_60_features_scaled: array (60, 4) ya escalado.
+    Para los dias futuros se mantienen Volume, RSI y Crisis del ultimo dia conocido.
     """
-    input_seq = last_60_days_scaled.copy().tolist()
-    predictions = []
+    input_seq = last_60_features_scaled.tolist()  # lista de listas [close, vol, rsi, crisis]
 
+    # Valores de features "no-precio" del ultimo dia conocido
+    last_vol    = last_60_features_scaled[-1, 1]
+    last_rsi    = last_60_features_scaled[-1, 2]
+    last_crisis = last_60_features_scaled[-1, 3]
+
+    predictions_scaled = []
     for _ in range(5):
-        X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, 1)
-        pred_scaled = model.predict(X, verbose=0)[0, 0]
-        predictions.append(pred_scaled)
-        input_seq.append([pred_scaled])
+        X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
+        pred_scaled = float(model.predict(X, verbose=0)[0, 0])
+        predictions_scaled.append(pred_scaled)
+        # Siguiente paso: usar precio predicho + ultimas features conocidas
+        input_seq.append([pred_scaled, last_vol, last_rsi, last_crisis])
 
-    # Invertir normalización
-    predictions_real = scaler.inverse_transform(
-        np.array(predictions).reshape(-1, 1)
-    ).flatten()
-
-    return predictions_real.tolist()
+    return _inv_close(scaler, np.array(predictions_scaled)).tolist()

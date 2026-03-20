@@ -6,6 +6,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import time
 import numpy as np
 import pandas as pd
 import joblib
@@ -18,12 +19,13 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # ── Paths ──────────────────────────────────────────────────────────────────
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR   = Path(__file__).parent.parent
 MODELS_DIR = BASE_DIR / "models"
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR   = BASE_DIR / "data"
 STATIC_DIR = Path(__file__).parent / "static"
 
 SEQUENCE_LENGTH = 60
+N_FEATURES      = 4   # Close, Volume, RSI, Crisis
 
 # ── Startup: cargar modelos ────────────────────────────────────────────────
 print("Cargando modelos...")
@@ -43,7 +45,7 @@ except Exception as e:
     print(f"Advertencia: No se pudo cargar scaler: {e}")
 
 try:
-    metrics_df = pd.read_csv(DATA_DIR / "metrics_comparison.csv")
+    metrics_df   = pd.read_csv(DATA_DIR / "metrics_comparison.csv")
     metrics_dict = metrics_df.to_dict(orient="records")
 except Exception:
     metrics_dict = []
@@ -55,7 +57,7 @@ except Exception:
     _logger_available = False
 
 # ── App ────────────────────────────────────────────────────────────────────
-app = FastAPI(title="IBEX 35 Predictor", version="1.0.0")
+app = FastAPI(title="IBEX 35 Predictor", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,16 +66,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir frontend estático
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
-def fetch_recent_ibex(days: int = 90) -> pd.Series:
-    """Descarga datos recientes del IBEX 35 con reintentos."""
-    import time
-    end = datetime.now()
-    start = end - timedelta(days=days + 30)
+def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
+    """Descarga datos recientes del IBEX 35 (Close + Volume) con reintentos."""
+    end       = datetime.now()
+    start     = end - timedelta(days=days + 30)
     start_str = start.strftime("%Y-%m-%d")
     end_str   = end.strftime("%Y-%m-%d")
 
@@ -83,37 +83,72 @@ def fetch_recent_ibex(days: int = 90) -> pd.Series:
                                auto_adjust=True, progress=False)
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
-            close = data["Close"].dropna()
-            if len(close) > 0:
-                return close
+            df = data[["Close", "Volume"]].dropna()
+            if len(df) > 0:
+                return df
         except Exception:
             pass
         if attempt < 2:
             time.sleep(2)
 
-    raise HTTPException(status_code=503, detail="No se pudo obtener datos de Yahoo Finance. Intenta de nuevo en unos segundos.")
+    raise HTTPException(
+        status_code=503,
+        detail="No se pudo obtener datos de Yahoo Finance. Intenta de nuevo en unos segundos."
+    )
 
 
-def predict_5days(close_series: pd.Series) -> list:
-    """Predicción autoregresiva a 5 días con el modelo LSTM."""
+def _compute_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Anade RSI y Crisis indicator al DataFrame Close+Volume."""
+    delta  = df["Close"].diff()
+    gain   = delta.clip(lower=0).rolling(14).mean()
+    loss   = (-delta.clip(upper=0)).rolling(14).mean()
+    rs     = gain / loss
+    df = df.copy()
+    df["RSI"] = (100 - (100 / (1 + rs))) / 100
+
+    crisis = pd.Series(0.0, index=df.index)
+    crisis[(df.index >= "2008-09-15") & (df.index <= "2009-03-09")] = 1.0
+    crisis[(df.index >= "2011-07-01") & (df.index <= "2012-07-01")] = 0.5
+    crisis[(df.index >= "2020-02-20") & (df.index <= "2020-06-30")] = 1.0
+    crisis[(df.index >= "2022-02-24") & (df.index <= "2022-12-31")] = 0.5
+    df["Crisis"] = crisis
+
+    return df.dropna()
+
+
+def _inv_close(scaled_arr: np.ndarray) -> np.ndarray:
+    """Inverse-transform valores de Close usando el scaler de 4 features."""
+    dummy = np.zeros((len(scaled_arr), N_FEATURES))
+    dummy[:, 0] = scaled_arr
+    return scaler.inverse_transform(dummy)[:, 0]
+
+
+def predict_5days(df: pd.DataFrame) -> list:
+    """Prediccion autoregresiva a 5 dias con el modelo LSTM multivariate."""
     if lstm_model is None or scaler is None:
         raise HTTPException(status_code=503, detail="Modelo no disponible")
 
-    last_60 = close_series.values[-SEQUENCE_LENGTH:]
-    scaled = scaler.transform(last_60.reshape(-1, 1))
+    features = _compute_features(df)
+    if len(features) < SEQUENCE_LENGTH:
+        raise HTTPException(status_code=400, detail="Datos insuficientes")
+
+    last_60  = features.values[-SEQUENCE_LENGTH:]          # (60, 4)
+    scaled   = scaler.transform(last_60)                   # (60, 4)
     input_seq = scaled.tolist()
-    predictions = []
 
+    # Features no-precio del ultimo dia (para los dias futuros)
+    last_vol    = scaled[-1, 1]
+    last_rsi    = scaled[-1, 2]
+    last_crisis = 0.0   # sin crisis activa actualmente
+
+    preds_scaled = []
     for _ in range(5):
-        X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, 1)
-        pred_scaled = float(lstm_model.predict(X, verbose=0)[0, 0])
-        predictions.append(pred_scaled)
-        input_seq.append([pred_scaled])
+        X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
+        p = float(lstm_model.predict(X, verbose=0)[0, 0])
+        preds_scaled.append(p)
+        input_seq.append([p, last_vol, last_rsi, last_crisis])
 
-    predictions_real = scaler.inverse_transform(
-        np.array(predictions).reshape(-1, 1)
-    ).flatten().tolist()
-    return predictions_real
+    return _inv_close(np.array(preds_scaled)).tolist()
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
@@ -126,36 +161,33 @@ def index():
 def health():
     return {
         "status": "ok",
-        "lstm_loaded": lstm_model is not None,
+        "lstm_loaded":   lstm_model is not None,
         "scaler_loaded": scaler is not None,
-        "timestamp": datetime.now().isoformat(),
+        "n_features":    N_FEATURES,
+        "timestamp":     datetime.now().isoformat(),
     }
 
 
 @app.get("/predict/5days")
 def predict_next_5_days():
-    """Genera predicción a 5 días hábiles usando datos en tiempo real."""
+    """Genera prediccion a 5 dias habiles usando datos en tiempo real."""
     try:
-        close = fetch_recent_ibex(days=120)
-        if len(close) < SEQUENCE_LENGTH:
-            raise HTTPException(status_code=400, detail="Datos insuficientes")
-
-        last_price = float(close.iloc[-1])
-        last_date = close.index[-1]
+        df = fetch_recent_ibex(days=120)
+        last_price = float(df["Close"].iloc[-1])
+        last_date  = df.index[-1]
         future_dates = pd.bdate_range(start=last_date, periods=6)[1:]
-        predictions = predict_5days(close)
+        predictions  = predict_5days(df)
 
         result = []
         for date, price in zip(future_dates, predictions):
             diff = price - last_price
             result.append({
-                "fecha": date.strftime("%Y-%m-%d"),
-                "prediccion": round(price, 2),
-                "variacion": round(diff, 2),
+                "fecha":         date.strftime("%Y-%m-%d"),
+                "prediccion":    round(price, 2),
+                "variacion":     round(diff, 2),
                 "variacion_pct": round(diff / last_price * 100, 2),
             })
 
-        # Guardar predicción del día 1 en el log automáticamente
         if _logger_available and result:
             try:
                 save_prediction(
@@ -168,9 +200,9 @@ def predict_next_5_days():
 
         return {
             "ultimo_precio": round(last_price, 2),
-            "ultima_fecha": last_date.strftime("%Y-%m-%d"),
-            "predicciones": result,
-            "disclaimer": "Predicción orientativa. No constituye asesoramiento financiero.",
+            "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
+            "predicciones":  result,
+            "disclaimer":    "Prediccion orientativa. No constituye asesoramiento financiero.",
         }
     except HTTPException:
         raise
@@ -180,27 +212,30 @@ def predict_next_5_days():
 
 @app.get("/historical")
 def get_historical(days: int = 365):
-    """Devuelve datos históricos del IBEX 35."""
+    """Devuelve datos historicos del IBEX 35."""
     try:
-        days = min(days, 3650)
-        close = fetch_recent_ibex(days=days)
+        days  = min(days, 3650)
+        df    = fetch_recent_ibex(days=days)
+        close = df["Close"]
         return {
-            "dates": [d.strftime("%Y-%m-%d") for d in close.index],
+            "dates":  [d.strftime("%Y-%m-%d") for d in close.index],
             "prices": [round(float(p), 2) for p in close.values],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/metrics")
 def get_metrics():
-    """Devuelve métricas comparativas ARIMA vs LSTM."""
+    """Devuelve metricas comparativas ARIMA vs LSTM."""
     return {"modelos": metrics_dict}
 
 
 @app.get("/accuracy")
 def get_accuracy():
-    """Devuelve historial de predicciones vs reales y métricas de accuracy."""
+    """Devuelve historial de predicciones vs reales y metricas de accuracy."""
     if not _logger_available:
         raise HTTPException(status_code=503, detail="Logger no disponible")
     try:
