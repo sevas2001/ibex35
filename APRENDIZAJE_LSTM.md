@@ -204,34 +204,109 @@ Un modelo aleatorio acierta ~50%.
 
 ---
 
-## 7. ¿El modelo aprende con nuevos datos?
+## 7. Walk-Forward — El modelo aprende cada día
 
-**Actualmente: NO.** El modelo está entrenado y guardado estáticamente.
-Cada vez que alguien pide una predicción:
-1. Se descargan los últimos 60 días de yfinance (datos frescos)
-2. Se aplican al modelo ya entrenado
-3. Se genera la predicción
+**Implementado en `src/walk_forward.py`**
 
-**Limitación:** el modelo nunca actualiza sus pesos con datos nuevos.
-Si el mercado cambia de régimen (crisis, cambio de política monetaria),
-el modelo puede quedarse desactualizado.
+En lugar de entrenar una vez con datos hasta 2023 y olvidarse,
+el walk-forward reentrena el modelo progresivamente añadiendo cada día real:
 
-### Para mejorar esto (trabajo futuro)
+```
+Iteración 1: train=[2012..2023-05-16] → predice 2023-05-17 → compara con real
+Iteración 2: train=[2012..2023-05-17] → predice 2023-05-18 → compara con real
+Iteración 3: train=[2012..2023-05-18] → predice 2023-05-19 → compara con real
+...
+Iteración 727: train=[2012..2026-03-18] → predice 2026-03-19
+```
 
-**Opción 1 — Reentrenamiento periódico**
-Programar un job semanal que descargue los datos nuevos y reentrene el modelo.
+### Fine-tuning incremental
 
-**Opción 2 — Online Learning**
-Actualizar los pesos del modelo con cada nuevo dato del día.
-Más complejo pero el modelo se adapta continuamente.
+No reentrenamos el modelo desde cero cada día (tardaría horas).
+En su lugar hacemos **fine-tuning**: cargamos el modelo existente y
+lo entrenamos 5 epochs más con los datos más recientes.
 
-**Opción 3 — Walk-forward validation**
-Técnica más honesta de evaluación: entrena hasta el día X, predice X+1,
-añade X+1 al train, predice X+2, etc. Simula el uso real.
+```
+modelo_existente.fit(ultimos_60_dias + nuevo_dia_real, epochs=5)
+```
+
+Esto es mucho más rápido (~2 segundos por día) y permite que el modelo
+se adapte gradualmente a cambios en el mercado.
+
+### Resultados reales del walk-forward (2023-05-17 → 2026-03-19)
+
+| Métrica | Resultado |
+|---------|-----------|
+| Dias evaluados | 727 |
+| Direction Accuracy | **48.4%** |
+| MAE | 105.84 pts |
+| RMSE | 146.88 pts |
+
+**¿Qué significa 48.4% de direction accuracy?**
+El modelo acierta la dirección (sube/baja) en casi 1 de cada 2 días.
+Un modelo aleatorio acierta exactamente el 50%. Nuestro modelo está
+muy cerca del azar — lo cual es un resultado **honesto y esperado**
+para un modelo que solo usa el precio de cierre.
+
+Un modelo que usara múltiples variables (volumen, índices extranjeros,
+tipos de interés) podría mejorar este resultado.
 
 ---
 
-## 8. Limitaciones honestas del modelo
+## 8. Sistema de tracking diario de predicciones
+
+**Implementado en `src/prediction_logger.py`**
+
+Cada vez que alguien consulta la predicción a 5 días en la web:
+1. La predicción del **día 1** se guarda automáticamente en `data/prediction_log.csv`
+2. Al día siguiente, el sistema descarga el precio real de yfinance
+3. Calcula el error y si acertó la dirección
+4. El dashboard muestra el historial con ✓/✗
+
+```
+prediction_log.csv:
+fecha_prediccion | precio_base | prediccion_d1 | real_d1 | error_abs | direction_correct
+2026-03-20       | 16905.90    | 16942.58      | ?       | ?         | ?
+```
+
+La columna `real_d1` se rellena automáticamente al día siguiente
+cuando yfinance publica el precio de cierre.
+
+**direction_correct:**
+- `1` → el modelo acertó si el índice subiría o bajaría
+- `0` → el modelo falló la dirección
+- vacío → aún no hay dato real disponible
+
+---
+
+## 9. Train Fit — ¿El modelo aprendió el pasado?
+
+**Gráfico generado en `data/plots/train_fit.png`**
+
+El train fit muestra las predicciones del modelo sobre los datos de
+entrenamiento (2012-2023) comparadas con los valores reales.
+
+**Resultados del train:**
+- MAE: 100.79 pts
+- RMSE: 138.39 pts
+
+Si el modelo hubiera **memorizado** el train set (overfitting extremo),
+el error sería casi cero. El hecho de que el MAE sea ~100 pts indica
+que el modelo **generalizó** — aprendió patrones pero no memorizó.
+
+**Comparando train vs test:**
+
+| | MAE | RMSE |
+|--|-----|------|
+| Train set | 100 pts | 138 pts |
+| Test set | 142 pts | 184 pts |
+
+El error sube un ~40% de train a test. Esto es overfitting moderado —
+normal y aceptable. Un overfitting severo sería error de 10 pts en train
+y 500 pts en test.
+
+---
+
+## 10. Limitaciones honestas del modelo
 
 1. **Los mercados no son predecibles** con alta precisión.
    El IBEX refleja millones de decisiones humanas + eventos imprevisibles.
@@ -251,7 +326,7 @@ añade X+1 al train, predice X+2, etc. Simula el uso real.
 
 ---
 
-## 9. Para seguir aprendiendo
+## 11. Para seguir aprendiendo
 
 - **Libro gratuito:** "Dive into Deep Learning" — capítulo de RNN/LSTM
 - **Paper original LSTM:** Hochreiter & Schmidhuber (1997) — "Long Short-Term Memory"
