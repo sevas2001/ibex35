@@ -69,10 +69,23 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# ── Cache en memoria (evita rate limiting de Yahoo Finance) ────────────────
+_cache: dict = {"df": None, "ts": None, "days": None}
+CACHE_TTL = 3600  # segundos (1 hora)
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
-    """Descarga datos recientes del IBEX 35 (Close + Volume) con reintentos."""
-    end       = datetime.now()
+    """Descarga datos recientes del IBEX 35 con caché de 1 hora."""
+    now = datetime.now()
+
+    # Devolver caché si está fresco y cubre los días pedidos
+    if (_cache["df"] is not None and _cache["ts"] is not None
+            and (_cache["days"] or 0) >= days
+            and (now - _cache["ts"]).total_seconds() < CACHE_TTL):
+        return _cache["df"]
+
+    end       = now
     start     = end - timedelta(days=days + 30)
     start_str = start.strftime("%Y-%m-%d")
     end_str   = end.strftime("%Y-%m-%d")
@@ -85,11 +98,18 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
                 data.columns = data.columns.get_level_values(0)
             df = data[["Close", "Volume"]].dropna()
             if len(df) > 0:
+                _cache["df"]   = df
+                _cache["ts"]   = now
+                _cache["days"] = days
                 return df
         except Exception:
             pass
         if attempt < 2:
             time.sleep(2)
+
+    # Si falló pero hay caché antiguo, usarlo antes de devolver error
+    if _cache["df"] is not None:
+        return _cache["df"]
 
     raise HTTPException(
         status_code=503,
