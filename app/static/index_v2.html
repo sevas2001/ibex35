@@ -943,9 +943,50 @@
       </div>
     </div>
 
+    <!-- ── Validacion Cutoff Mar-30 ─────────────────────────── -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">Predictions — Next 5 Business Days</span>
+        <span class="card-title">Validacion Cutoff 30-Mar-2026 — Prediccion vs Real (31-Mar &rarr; 10-Abr)</span>
+      </div>
+      <div class="card-body">
+        <div class="backtest-kpi-strip" style="margin-bottom:14px">
+          <div class="bkpi-item"><span class="bkpi-label">Entrenado hasta</span><span class="bkpi-val" style="color:var(--t1)">30-Mar-2026</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE</span><span class="bkpi-val" style="color:var(--down)">749 pts</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Dir. Accuracy</span><span class="bkpi-val" style="color:var(--up)">7/7 (100%)</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Contexto</span><span class="bkpi-val" style="color:var(--t2);font-size:10px">IBEX +7.3% en 10 dias</span></div>
+        </div>
+        <table class="pred-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th style="text-align:right">ARIMA pred.</th>
+              <th style="text-align:right">Real</th>
+              <th style="text-align:right">Error</th>
+              <th style="text-align:center">Dir.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="pred-date">31-Mar-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,981.56</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,049.60</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+68</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">01-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,973.92</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,580.40</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+606</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">02-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,972.66</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,555.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+583</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr style="opacity:0.45"><td class="pred-date" colspan="5" style="text-align:center;font-size:11px;color:var(--down)">— Semana Santa: Vie. Santo 3-Abr + Lun. Pascua 6-Abr — mercado cerrado —</td></tr>
+            <tr><td class="pred-date">07-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,977.65</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,444.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+467</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">08-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,974.16</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,132.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,158</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">09-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,973.69</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,104.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,131</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">10-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,973.81</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,204.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,230</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+          </tbody>
+        </table>
+        <div class="horizon-disclaimer" style="margin-top:10px">
+          MAE elevado porque el IBEX subio +7.3% en 10 dias (evento extremo post-aranceles Trump).
+          La direccion fue correcta los 7 dias. ARIMA captura tendencia, no eventos de cola.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Live Forecast ─────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Prediccion en Vivo — Proximos 5 Dias Habiles</span>
         <button class="btn-refresh" id="predBtn" onclick="loadPredictions()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="23 4 23 10 17 10"/>
@@ -958,7 +999,7 @@
         <table class="pred-table">
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Fecha</th>
               <th class="arima-col" style="text-align:right">ARIMA ★</th>
               <th style="text-align:right">LSTM</th>
               <th style="text-align:right">GRU</th>
@@ -972,15 +1013,7 @@
             <tr><td colspan="4"><div class="skeleton" style="width:75%"></div></td></tr>
           </tbody>
         </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">Recent History + 5-Day Forecast</span>
-      </div>
-      <div class="card-body">
-        <div class="chart-wrap sm">
+        <div class="chart-wrap sm" style="margin-top:14px">
           <canvas id="predChart"></canvas>
         </div>
       </div>
@@ -989,7 +1022,7 @@
     <!-- ── Trading Horizon ───────────────────────────────── -->
     <div class="card" id="horizonSection">
       <div class="card-header">
-        <span class="card-title">Trading Horizon — Projection Tool</span>
+        <span class="card-title">Prediccion a Futuro — Selecciona Horizonte (dias que aun no ocurrieron)</span>
         <div class="horizon-selector" id="horizonBtns">
           <button class="horizon-btn active" data-days="1" onclick="loadHorizon(1)">1D</button>
           <button class="horizon-btn" data-days="2" onclick="loadHorizon(2)">2D</button>
@@ -1033,31 +1066,10 @@
       </div>
     </div>
 
-    <!-- ── STL Decomposition ──────────────────────────────── -->
-    <div class="card" id="stlSection">
-      <div class="card-header">
-        <span class="card-title">STL Decomposition — Trend · Seasonal · Residual</span>
-      </div>
-      <div class="card-body">
-        <div class="stl-img-wrap">
-          <img id="stlImg" src="/plots/stl_decomposition.png" alt="STL Decomposition"
-               onload="this.classList.add('loaded')"
-               onerror="document.getElementById('stlSection').style.display='none'" />
-        </div>
-        <div class="stl-desc">
-          <strong>STL</strong> (Seasonal and Trend decomposition using Loess) separates the IBEX 35 series into
-          three components: <em>Trend</em> (long-run direction), <em>Seasonality</em> (periodic patterns within the year)
-          and <em>Residual</em> (unexplained noise). The dominant component is the aperiodic trend, consistent with
-          ARIMA(5,1,0) outperforming seasonal models. The residual shows heteroskedasticity — periods of high volatility
-          (2008 crisis, COVID-19 2020) where error variance spikes markedly.
-        </div>
-      </div>
-    </div>
-
     <!-- ── Multi-Period Validation ────────────────────────── -->
     <div class="card" id="validationSection">
       <div class="card-header">
-        <span class="card-title">Multi-Period Validation — ARIMA(5,1,0) across 5 Market Regimes</span>
+        <span class="card-title">Validacion Multi-Periodo — ARIMA(5,1,0) en 5 regimenes de mercado</span>
       </div>
       <div class="card-body">
         <table class="pred-table" id="validationTable">
@@ -1083,7 +1095,7 @@
     <!-- ── Backtest ────────────────────────────────────────── -->
     <div class="card" id="backtestSection">
       <div class="card-header">
-        <span class="card-title">Full Backtest 1993–2026 — ARIMA vs LSTM vs GRU</span>
+        <span class="card-title">Backtest Historico 1993–2026 — ARIMA vs LSTM vs GRU</span>
         <div class="days-selector">
           <button class="days-btn active" onclick="loadBacktest(365)">1Y</button>
           <button class="days-btn" onclick="loadBacktest(1825)">5Y</button>
@@ -1105,7 +1117,7 @@
 
     <div class="card" id="accuracySection">
       <div class="card-header">
-        <span class="card-title">Production Accuracy — Daily Predictions vs Actual</span>
+        <span class="card-title">Historial de Predicciones — Aciertos vs Fallos</span>
       </div>
       <div class="card-body">
         <div class="acc-hero">
