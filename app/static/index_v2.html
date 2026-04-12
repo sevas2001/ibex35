@@ -983,51 +983,15 @@
       </div>
     </div>
 
-    <!-- ── Live Forecast ─────────────────────────────────────── -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">Prediccion en Vivo — Proximos 5 Dias Habiles</span>
-        <button class="btn-refresh" id="predBtn" onclick="loadPredictions()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
-          Refresh
-        </button>
-      </div>
-      <div class="card-body" style="padding-top:12px">
-        <table class="pred-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th class="arima-col" style="text-align:right">ARIMA ★</th>
-              <th style="text-align:right">LSTM</th>
-              <th style="text-align:right">GRU</th>
-            </tr>
-          </thead>
-          <tbody id="predTableBody">
-            <tr><td colspan="4"><div class="skeleton" style="width:80%"></div></td></tr>
-            <tr><td colspan="4"><div class="skeleton" style="width:70%"></div></td></tr>
-            <tr><td colspan="4"><div class="skeleton" style="width:85%"></div></td></tr>
-            <tr><td colspan="4"><div class="skeleton" style="width:60%"></div></td></tr>
-            <tr><td colspan="4"><div class="skeleton" style="width:75%"></div></td></tr>
-          </tbody>
-        </table>
-        <div class="chart-wrap sm" style="margin-top:14px">
-          <canvas id="predChart"></canvas>
-        </div>
-      </div>
-    </div>
-
     <!-- ── Trading Horizon ───────────────────────────────── -->
     <div class="card" id="horizonSection">
       <div class="card-header">
         <span class="card-title">Prediccion a Futuro — Selecciona Horizonte (dias que aun no ocurrieron)</span>
         <div class="horizon-selector" id="horizonBtns">
-          <button class="horizon-btn active" data-days="1" onclick="loadHorizon(1)">1D</button>
+          <button class="horizon-btn" data-days="1" onclick="loadHorizon(1)">1D</button>
           <button class="horizon-btn" data-days="2" onclick="loadHorizon(2)">2D</button>
           <button class="horizon-btn" data-days="3" onclick="loadHorizon(3)">3D</button>
-          <button class="horizon-btn" data-days="5" onclick="loadHorizon(5)">5D</button>
+          <button class="horizon-btn active" data-days="5" onclick="loadHorizon(5)">5D</button>
           <button class="horizon-btn" data-days="7" onclick="loadHorizon(7)">7D</button>
           <button class="horizon-btn" data-days="10" onclick="loadHorizon(10)">10D</button>
         </div>
