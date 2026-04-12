@@ -1,2 +1,4 @@
 models/*.pkl filter=lfs diff=lfs merge=lfs -text
 models/*.keras filter=lfs diff=lfs merge=lfs -text
+# gru_model.keras es pequeño (1.2MB) — excluido de LFS para compatibilidad HF Spaces
+models/gru_model.keras !filter !diff !merge

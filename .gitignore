@@ -8,6 +8,7 @@ venv/
 
 # Datos brutos (pesados, no necesarios en producción)
 data/raw/
+!data/raw/ibex35_raw.csv
 data/preprocessed_data.npz
 
 # Gráficos generados
