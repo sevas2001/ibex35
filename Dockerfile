@@ -2,9 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Dependencias del sistema
+# Dependencias del sistema (git-lfs para resolver modelos en HF Spaces)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+    build-essential git git-lfs \
+    && git lfs install \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar dependencias Python

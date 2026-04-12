@@ -28,7 +28,35 @@ SEQUENCE_LENGTH = 60
 N_FEATURES      = 1   # Close (univariado)
 
 # ── Startup: cargar modelos ────────────────────────────────────────────────
+def _is_lfs_pointer(path: Path) -> bool:
+    """Devuelve True si el archivo es un puntero LFS (no el binario real)."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(64).startswith(b"version https://git-lfs")
+    except Exception:
+        return False
+
+def _try_resolve_lfs(path: Path):
+    """Intenta resolver punteros LFS via git lfs pull (best-effort)."""
+    import subprocess
+    try:
+        rel = str(path.relative_to(BASE_DIR))
+        result = subprocess.run(
+            ["git", "lfs", "pull", f"--include={rel}"],
+            cwd=str(BASE_DIR), capture_output=True, timeout=30,
+        )
+        print(f"git lfs pull {rel}: {'OK' if result.returncode == 0 else 'failed'}")
+    except Exception as e:
+        print(f"No se pudo resolver LFS para {path.name}: {e}")
+
 print("Cargando modelos...")
+
+for _model_path in [MODELS_DIR / "lstm_model.keras", MODELS_DIR / "gru_model.keras",
+                    MODELS_DIR / "scaler.pkl"]:
+    if _is_lfs_pointer(_model_path):
+        print(f"[LFS] {_model_path.name} es puntero — resolviendo...")
+        _try_resolve_lfs(_model_path)
+
 try:
     from tensorflow import keras
     lstm_model = keras.models.load_model(MODELS_DIR / "lstm_model.keras")
