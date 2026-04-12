@@ -290,9 +290,10 @@ def predict_next_5_days():
 def get_historical(days: int = 365):
     """Devuelve datos historicos del IBEX 35."""
     try:
-        days  = min(days, 3650)
         df    = fetch_recent_ibex(days=days)
-        close = df["Close"]
+        close = df["Close"].sort_index()
+        # Recortar al numero de dias solicitado (importante cuando se sirve desde CSV completo)
+        close = close.iloc[-min(days, len(close)):]
         return {
             "dates":  [d.strftime("%Y-%m-%d") for d in close.index],
             "prices": [round(float(p), 2) for p in close.values],
