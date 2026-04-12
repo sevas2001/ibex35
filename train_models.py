@@ -13,6 +13,7 @@ from src.arima_model   import test_stationarity, plot_acf_pacf, train_arima, eva
 from src.lstm_model    import train_lstm, plot_training_history, evaluate_lstm, predict_next_5_days
 from src.gru_model     import train_gru, plot_gru_training_history, evaluate_gru, predict_next_5_days_gru
 from src.evaluator     import compare_models, plot_predictions, plot_metrics_bar
+from src.backtester    import run_backtest, plot_backtest
 
 DATA_DIR   = Path("data")
 MODELS_DIR = Path("models")
@@ -23,9 +24,10 @@ def main():
     print("  IBEX 35 — Fase 2: Modelos ARIMA + LSTM + GRU")
     print("=" * 55)
 
-    # Cargar datos
-    data  = load_ibex35()
+    # Cargar datos — historico completo desde 1993
+    data  = load_ibex35(full_history=True)
     close = data["Close"]
+    print(f"Datos cargados: {len(close)} dias | {close.index[0].date()} hasta {close.index[-1].date()}")
 
     split_idx    = int(len(close) * TRAIN_RATIO)
     train_series = close.iloc[:split_idx]
@@ -104,6 +106,23 @@ def main():
     })
     pred_df.to_csv(DATA_DIR / "predictions_5days.csv", index=False)
     print("\nPredicciones guardadas en data/predictions_5days.csv")
+
+    # ── BACKTESTING dia a dia — serie COMPLETA desde 1993 ────
+    print("\n--- Backtesting completo (desde 1993) ---")
+    full_close_arr = close.values.astype(float)
+    bt_df = run_backtest(
+        full_close   = full_close_arr,
+        full_index   = close.index,
+        train_size   = split_idx,
+        scaler       = scaler,
+        lstm_model   = lstm_model,
+        gru_model    = gru_model,
+        arima_order  = (5, 1, 0),
+        full_history = True,
+    )
+    train_cutoff = close.index[split_idx]
+    plot_backtest(bt_df, train_cutoff_date=train_cutoff)
+
     print("\nFase 2 completada.")
 
 

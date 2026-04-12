@@ -12,25 +12,51 @@ MODELS_DIR = Path(__file__).parent.parent / "models"
 
 SEQUENCE_LENGTH = 60
 TRAIN_RATIO     = 0.80
-N_FEATURES      = 1   # Close (univariado — mejor rendimiento en test)
+N_FEATURES      = 1   # Close (univariado — modelos LSTM/GRU originales)
 
 # NOTA ACADEMICA: Se probaron features adicionales (RSI, Crisis indicator, Volume).
 # El modelo univariado supera al multivariate en este dataset porque:
 # - RSI es derivado de Close (informacion redundante)
 # - Volume del indice ^IBEX es poco fiable en Yahoo Finance
 # Crisis indicators implementados en compute_features() para referencia futura.
+# v2: compute_features_v2() añade log_return + RSI14 + MA50_ratio para el modelo hibrido.
 
 
 def compute_features(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Retorna DataFrame con solo Close (modelo univariado).
-    Los crisis indicators se mantienen como experimento documentado.
-
-    Resultados del experimento multivariate (3 features: Close+RSI+Crisis):
-      MAE: 285 pts vs MAE: 142 pts univariado — el univariado gana.
+    Retorna DataFrame con solo Close (modelo univariado LSTM/GRU original).
     """
     df = pd.DataFrame(index=data.index)
     df["Close"] = data["Close"]
+    return df.dropna()
+
+
+def compute_features_v2(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Features enriquecidas para el modelo hibrido ARIMA+LSTM:
+      - close:       precio de cierre (col 0, target inverse_transform)
+      - log_return:  ln(Close_t / Close_{t-1}) — hace la serie estacionaria
+      - ma50_ratio:  Close / MA(50) — posicion relativa al trend medio
+      - rsi14:       RSI(14) normalizado [0,1] — momentum/sobrecompra
+
+    N_FEATURES_V2 = 4
+    """
+    df = pd.DataFrame(index=data.index)
+    close = data["Close"]
+
+    df["close"]      = close
+    df["log_return"] = np.log(close / close.shift(1))
+
+    ma50 = close.rolling(50).mean()
+    df["ma50_ratio"] = close / ma50
+
+    # RSI(14)
+    delta = close.diff()
+    gain  = delta.clip(lower=0).rolling(14).mean()
+    loss  = (-delta.clip(upper=0)).rolling(14).mean()
+    rs    = gain / (loss + 1e-9)
+    df["rsi14"] = (100 - 100 / (1 + rs)) / 100.0   # normalizado [0,1]
+
     return df.dropna()
 
 

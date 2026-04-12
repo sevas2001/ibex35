@@ -1,0 +1,6 @@
+corte,descripcion,n,mae,rmse,mape,dir_acc,dm_p,mae_ci_lo,mae_ci_hi
+2015-01-01,Mercado lateral post-crisis,126,100.4,135.0,0.92,40.8,1.0,84.6,116.2
+2017-01-01,Expansion pre-Brexit,126,60.4,83.1,0.59,50.4,1.0,50.5,70.4
+2019-01-01,Pre-COVID,126,51.6,67.5,0.56,47.2,1.0,43.9,59.2
+2021-01-01,Recuperacion post-COVID,126,62.1,81.4,0.73,44.8,1.0,52.9,71.3
+2023-01-01,Mercado actual,126,65.0,89.3,0.71,41.6,1.0,54.3,75.8

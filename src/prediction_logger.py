@@ -13,11 +13,14 @@ LOG_PATH = Path(__file__).parent.parent / "data" / "prediction_log.csv"
 COLUMNS = [
     "fecha_prediccion",   # fecha en que se hizo la predicción
     "precio_base",        # último precio real en el momento de predecir
-    "prediccion_d1",      # predicción para el día hábil siguiente
+    "prediccion_d1",      # predicción LSTM para el día hábil siguiente
+    "prediccion_arima",   # predicción ARIMA para el día hábil siguiente
     "real_d1",            # precio real del día siguiente (se rellena al día siguiente)
-    "error_abs",          # |real - prediccion|
+    "error_abs",          # |real - prediccion_lstm|
+    "error_arima",        # |real - prediccion_arima|
     "error_pct",          # error en %
-    "direction_correct",  # 1 si acertó dirección, 0 si no, None si aún no hay real
+    "direction_correct",  # 1 si acertó dirección (LSTM), 0 si no, None si aún no hay real
+    "direction_arima",    # 1 si ARIMA acertó dirección
 ]
 
 
@@ -31,6 +34,7 @@ def _init_log() -> pd.DataFrame:
 
 
 def save_prediction(precio_base: float, prediccion_d1: float,
+                    prediccion_arima: float = None,
                     fecha: str = None) -> None:
     """
     Guarda la predicción de hoy en el log.
@@ -48,10 +52,13 @@ def save_prediction(precio_base: float, prediccion_d1: float,
         "fecha_prediccion": hoy,
         "precio_base": round(precio_base, 2),
         "prediccion_d1": round(prediccion_d1, 2),
+        "prediccion_arima": round(prediccion_arima, 2) if prediccion_arima is not None else None,
         "real_d1": None,
         "error_abs": None,
+        "error_arima": None,
         "error_pct": None,
         "direction_correct": None,
+        "direction_arima": None,
     }])
     df = pd.concat([df, nueva], ignore_index=True)
     df.to_csv(LOG_PATH, index=False)
@@ -126,6 +133,15 @@ def update_with_real_prices() -> pd.DataFrame:
             df.at[idx, "error_pct"] = error_pct
             df.at[idx, "direction_correct"] = direction_correct
 
+            # ARIMA si existe
+            arima_col = "prediccion_arima"
+            if arima_col in df.columns and pd.notna(row.get(arima_col)):
+                pred_a = float(row[arima_col])
+                err_a  = abs(real - pred_a)
+                dir_a  = int((real > base) == (pred_a > base))
+                df.at[idx, "error_arima"]    = round(err_a, 2)
+                df.at[idx, "direction_arima"] = dir_a
+
     df.to_csv(LOG_PATH, index=False)
     return df
 
@@ -142,6 +158,8 @@ def get_accuracy_summary() -> dict:
             "direction_accuracy_pct": None,
             "mae": None,
             "rmse": None,
+            "direction_arima_pct": None,
+            "mae_arima": None,
             "historial": [],
         }
 
@@ -152,6 +170,18 @@ def get_accuracy_summary() -> dict:
     mae = round(evaluated["error_abs"].mean(), 2)
     rmse = round(np.sqrt((evaluated["error_abs"] ** 2).mean()), 2)
 
+    # Métricas ARIMA (solo filas donde existe prediccion_arima)
+    direction_arima_pct = None
+    mae_arima = None
+    if "error_arima" in evaluated.columns:
+        arima_eval = evaluated[evaluated["error_arima"].notna()].copy()
+        if not arima_eval.empty:
+            arima_eval["error_arima"] = arima_eval["error_arima"].astype(float)
+            mae_arima = round(arima_eval["error_arima"].mean(), 2)
+            if "direction_arima" in arima_eval.columns:
+                arima_eval["direction_arima"] = arima_eval["direction_arima"].astype(float)
+                direction_arima_pct = round(arima_eval["direction_arima"].mean() * 100, 1)
+
     historial = evaluated.sort_values("fecha_prediccion", ascending=False).head(30)
     historial = historial.fillna("").to_dict(orient="records")
 
@@ -161,5 +191,7 @@ def get_accuracy_summary() -> dict:
         "direction_accuracy_pct": direction_acc,
         "mae": mae,
         "rmse": rmse,
+        "direction_arima_pct": direction_arima_pct,
+        "mae_arima": mae_arima,
         "historial": historial,
     }

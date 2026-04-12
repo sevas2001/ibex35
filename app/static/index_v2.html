@@ -1,0 +1,2080 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IBEX 35 — Predictor v2</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+  <style>
+    /* ── Design tokens ───────────────────────────────────── */
+    :root {
+      --bg:           #0a0a0f;
+      --surface:      #111118;
+      --surface-2:    #16161f;
+      --border:       rgba(255,255,255,0.08);
+      --border-subtle:rgba(255,255,255,0.04);
+      --green:        #00d4aa;
+      --green-dim:    rgba(0,212,170,0.12);
+      --blue:         #3b82f6;
+      --blue-dim:     rgba(59,130,246,0.12);
+      --purple:       #8b5cf6;
+      --up:           #22c55e;
+      --down:         #ef4444;
+      --t1:           #f1f5f9;
+      --t2:           #94a3b8;
+      --t3:           #475569;
+      --mono:         'JetBrains Mono', monospace;
+      --sans:         'Inter', sans-serif;
+    }
+
+    /* ── Reset ───────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Base ────────────────────────────────────────────── */
+    body {
+      font-family: var(--sans);
+      background-color: var(--bg);
+      color: var(--t1);
+      min-height: 100vh;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    /* ── Animations ──────────────────────────────────────── */
+    @keyframes pulse-live {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* v2 entrance animations */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeSlideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes badgeGlow {
+      0%, 100% { box-shadow: none; }
+      50%       { box-shadow: 0 0 10px rgba(0,212,170,0.55), 0 0 20px rgba(0,212,170,0.2); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* Header entrance */
+    header {
+      animation: fadeSlideDown 0.45s cubic-bezier(0.22,1,0.36,1) both;
+    }
+
+    /* Card stagger */
+    .card:nth-child(1) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 0ms   both; }
+    .card:nth-child(2) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 80ms  both; }
+    .card:nth-child(3) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 160ms both; }
+    .card:nth-child(4) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 240ms both; }
+    .card:nth-child(5) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 320ms both; }
+    .card:nth-child(6) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 400ms both; }
+    .card:nth-child(7) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 480ms both; }
+    .card:nth-child(8) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 560ms both; }
+
+    /* Sidebar card stagger */
+    .sb-card:nth-child(1) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 40ms  both; }
+    .sb-card:nth-child(2) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 120ms both; }
+    .sb-card:nth-child(3) { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) 200ms both; }
+
+    /* Price flash states */
+    .header-price {
+      transition: color 0.3s ease;
+    }
+    .header-price.flash-up   { color: #22c55e !important; }
+    .header-price.flash-down { color: #ef4444 !important; }
+
+    /* Metric progress bars */
+    .metric-bar {
+      height: 2px;
+      background: rgba(255,255,255,0.06);
+      margin-top: 5px;
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .metric-bar-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 1px;
+      transition: width 0.9s cubic-bezier(0.22,1,0.36,1);
+    }
+    .model-card.arima .metric-bar-fill { background: var(--green); }
+    .model-card.lstm  .metric-bar-fill { background: var(--blue); }
+    .model-card.gru   .metric-bar-fill { background: var(--purple); }
+
+    /* Model card hover elevation */
+    .model-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .model-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    }
+
+    /* ARIMA badge glow */
+    .model-badge-best {
+      animation: badgeGlow 4s ease-in-out infinite;
+    }
+
+    /* Prediction table row hover */
+    .pred-table tbody tr {
+      border-left: 2px solid transparent;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .pred-table tbody tr:hover {
+      border-left-color: var(--green);
+      background: rgba(0,212,170,0.04);
+    }
+    .pred-table tbody tr:hover td {
+      background: transparent !important;
+    }
+
+    /* Refresh countdown bar */
+    #refreshBar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--green), #3b82f6);
+      width: 100%;
+      z-index: 200;
+      transform-origin: left;
+      transition: width 60s linear;
+      pointer-events: none;
+    }
+
+    /* Particle canvas */
+    #particleCanvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* prefers-reduced-motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+
+    /* ═══════════════════════════════════════════════════════
+       HEADER
+    ═══════════════════════════════════════════════════════ */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 60px;
+      background: #111118;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+    }
+
+    .header-inner {
+      width: 100%;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .header-ticker {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .header-ticker-symbol {
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--t1);
+      letter-spacing: 0.02em;
+    }
+    .header-ticker-symbol span { color: var(--green); }
+    .header-ticker-label {
+      font-family: var(--sans);
+      font-size: 12px;
+      color: var(--t3);
+      font-weight: 500;
+    }
+
+    .header-price-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+    .header-price {
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: 28px;
+      color: var(--t1);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .header-change-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .header-change-badge.up      { background: rgba(34,197,94,0.12);  color: var(--up); }
+    .header-change-badge.down    { background: rgba(239,68,68,0.12);   color: var(--down); }
+    .header-change-badge.neutral { background: rgba(255,255,255,0.06); color: var(--t2); }
+
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-shrink: 0;
+    }
+    .header-timestamp {
+      font-family: var(--sans);
+      font-size: 12px;
+      color: var(--t3);
+    }
+    .header-timestamp strong { color: var(--t2); font-weight: 500; }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--t3);
+      letter-spacing: 0.02em;
+    }
+    .status-badge.online { color: var(--green); }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+    .status-badge.online .status-dot {
+      animation: pulse-live 2s ease infinite;
+      box-shadow: 0 0 6px currentColor;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       APP LAYOUT
+    ═══════════════════════════════════════════════════════ */
+    .app-body {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 0;
+      min-height: calc(100vh - 60px);
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════════════════════ */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sb-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
+    }
+
+    .sb-section-title {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: 12px;
+    }
+
+    .sb-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .sb-row:last-child { margin-bottom: 0; }
+    .sb-row-label { font-size: 12px; color: var(--t3); }
+    .sb-row-value {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--t1);
+    }
+    .sb-row-value.up   { color: var(--up); }
+    .sb-row-value.down { color: var(--down); }
+
+    .sb-acc-value {
+      font-family: var(--mono);
+      font-size: 32px;
+      font-weight: 500;
+      color: var(--t1);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .sb-acc-label { font-size: 11px; color: var(--t3); }
+
+    /* Model cards */
+    .model-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      border-left-width: 3px;
+    }
+    .model-card:last-child { margin-bottom: 0; }
+    .model-card.arima { border-left-color: var(--green); }
+    .model-card.lstm  { border-left-color: var(--blue); }
+    .model-card.gru   { border-left-color: var(--purple); }
+
+    .model-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .model-card-name {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--t1);
+    }
+    .model-badge-best {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--green);
+      background: var(--green-dim);
+      border-radius: 3px;
+      padding: 2px 6px;
+    }
+    .model-metrics { display: flex; gap: 16px; }
+    .model-metric-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+    .model-metric-label { font-size: 10px; color: var(--t3); }
+    .model-metric-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--t2);
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       MAIN CONTENT
+    ═══════════════════════════════════════════════════════ */
+    .main-content {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .card-header {
+      padding: 16px 20px 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-title {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--t3);
+    }
+    .card-body { padding: 16px 20px 20px 20px; }
+
+    .days-selector { display: flex; gap: 4px; }
+    .days-btn {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      background: transparent;
+      color: var(--t3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .days-btn:hover {
+      color: var(--t2);
+      border-color: rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.04);
+    }
+    .days-btn.active {
+      background: rgba(0,212,170,0.15);
+      border-color: var(--green);
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .chart-wrap { position: relative; height: 300px; }
+    .chart-wrap.sm { height: 220px; }
+
+    /* Predictions table */
+    .pred-table { width: 100%; border-collapse: collapse; }
+    .pred-table th {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--t3);
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .pred-table th:not(:first-child) { text-align: right; }
+    .pred-table td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: middle;
+      transition: background 0.1s;
+    }
+    .pred-table tr:last-child td { border-bottom: none; }
+
+    .pred-date { font-size: 13px; color: var(--t2); }
+    .pred-price-cell { text-align: right; }
+    .pred-price {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--t1);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    .pred-price .dir-arrow { font-size: 11px; }
+    .pred-price .dir-arrow.up   { color: var(--up); }
+    .pred-price .dir-arrow.down { color: var(--down); }
+    .pred-pct {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--t3);
+      text-align: right;
+      margin-top: 2px;
+    }
+    .pred-pct.up   { color: var(--up); }
+    .pred-pct.down { color: var(--down); }
+
+    /* Accuracy */
+    .acc-hero { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 20px; }
+    .acc-big {
+      font-family: var(--mono);
+      font-size: 48px;
+      font-weight: 500;
+      line-height: 1;
+      color: var(--t1);
+    }
+    .acc-label { font-size: 12px; color: var(--t3); padding-bottom: 6px; }
+
+    .acc-table { width: 100%; border-collapse: collapse; }
+    .acc-table th {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--t3);
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .acc-table td {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--t2);
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background 0.1s;
+    }
+    .acc-table tr:last-child td { border-bottom: none; }
+    .acc-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+
+    .result-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 3px;
+    }
+    .result-badge.ok      { background: rgba(34,197,94,0.12);  color: var(--up); }
+    .result-badge.fail    { background: rgba(239,68,68,0.12);   color: var(--down); }
+    .result-badge.pending { background: rgba(255,255,255,0.06); color: var(--t3); }
+
+    /* Skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, #111118 25%, #1e1e2e 50%, #111118 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 3px;
+      height: 12px;
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 12px; height: 12px;
+      border: 1.5px solid rgba(255,255,255,0.08);
+      border-top-color: var(--t2);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    /* Refresh button */
+    .btn-refresh {
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      color: var(--t3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-refresh:hover   { color: var(--t1); border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); }
+    .btn-refresh:active  { transform: scale(0.97); }
+    .btn-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-refresh svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .footer-disclaimer { font-size: 11px; color: var(--t3); max-width: 560px; }
+    .footer-brand { font-family: var(--sans); font-size: 11px; color: var(--t3); white-space: nowrap; }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .app-body { grid-template-columns: 1fr; }
+      .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 16px;
+        gap: 12px;
+      }
+      .sb-card { flex: 1 1 200px; }
+      .model-card-section { display: flex; gap: 12px; width: 100%; }
+      .model-card { flex: 1; margin-bottom: 0; }
+    }
+    @media (max-width: 640px) {
+      .header-price { font-size: 20px; }
+      .header-timestamp { display: none; }
+      .main-content { padding: 16px; gap: 16px; }
+    }
+
+    /* ── ARIMA column highlight ──────────────────────────── */
+    .arima-col {
+      background: rgba(0,212,170,0.06) !important;
+      color: var(--green) !important;
+    }
+    .pred-table thead .arima-col { color: var(--green); font-weight: 600; }
+
+    /* ── Stat badges (R² / DW in model card) ─────────────── */
+    .stat-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .stat-badge {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      background: rgba(0,212,170,0.08);
+      border: 1px solid rgba(0,212,170,0.18);
+      border-radius: 4px;
+      padding: 4px 8px;
+      flex: 1;
+    }
+    .stat-badge-label {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--t3);
+    }
+    .stat-badge-val {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--green);
+    }
+
+    /* ── Backtest KPI strip ───────────────────────────────── */
+    .backtest-kpi-strip {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .bkpi-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 10px;
+      border-right: 1px solid var(--border);
+    }
+    .bkpi-item:last-child { border-right: none; }
+    .bkpi-label {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: 3px;
+    }
+    .bkpi-val {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--t1);
+    }
+
+    /* ── Validation table row stagger ────────────────────── */
+    @keyframes rowSlideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .val-row-anim {
+      animation: rowSlideIn 0.28s cubic-bezier(0.22,1,0.36,1) both;
+    }
+
+    /* ── STL image ───────────────────────────────────────── */
+    .stl-img-wrap {
+      width: 100%;
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--surface-2);
+    }
+    .stl-img-wrap img {
+      width: 100%;
+      display: block;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    .stl-img-wrap img.loaded { opacity: 1; }
+    .stl-desc {
+      font-size: 12px;
+      color: var(--t2);
+      line-height: 1.6;
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: var(--surface-2);
+      border-left: 2px solid var(--green);
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* ── Horizon predictor ────────────────────────────────── */
+    .horizon-selector {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .horizon-btn {
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--t3);
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .horizon-btn:hover { background: var(--surface-2); color: var(--t1); }
+    .horizon-btn.active {
+      background: var(--green-dim);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .horizon-disclaimer {
+      font-size: 10px;
+      color: var(--t3);
+      margin-top: 10px;
+      padding: 8px 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      background: var(--surface-2);
+    }
+  </style>
+</head>
+<body>
+
+<!-- Particle canvas background -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- Refresh countdown bar -->
+<div id="refreshBar"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════════════════ -->
+<header>
+  <div class="header-inner">
+    <div class="header-ticker">
+      <div class="header-ticker-symbol"><span>^</span>IBEX &nbsp;·&nbsp; <span>IBEX</span> 35</div>
+      <div class="header-ticker-label">Madrid</div>
+    </div>
+
+    <div class="header-price-group">
+      <div class="header-price" id="headerPrice">—</div>
+      <div class="header-change-badge neutral" id="headerBadge">— —%</div>
+    </div>
+
+    <div class="header-meta">
+      <div class="header-timestamp">
+        Last update &nbsp;<strong id="clock">--:--:--</strong>
+      </div>
+      <div class="status-badge" id="statusBadge">
+        <span class="status-dot"></span>
+        <span id="statusText">INIT</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════
+     APP BODY
+═══════════════════════════════════════════════════════════ -->
+<div class="app-body">
+
+  <!-- ── SIDEBAR ───────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <div class="sb-card">
+      <div class="sb-section-title">Market KPIs</div>
+      <div class="sb-row">
+        <span class="sb-row-label">Last Price</span>
+        <span class="sb-row-value" id="lastPrice">—</span>
+      </div>
+      <div class="sb-row">
+        <span class="sb-row-label">Date</span>
+        <span class="sb-row-value" style="font-size:11px;color:var(--t2)" id="lastDate">—</span>
+      </div>
+      <div class="sb-row">
+        <span class="sb-row-label">Direction</span>
+        <span class="sb-row-value" id="sidebarDirection">—</span>
+      </div>
+    </div>
+
+    <div class="sb-card">
+      <div class="sb-section-title">Production Accuracy</div>
+      <div class="sb-acc-value" id="dirAccuracy">—</div>
+      <div class="sb-acc-label">Direction Accuracy</div>
+      <div style="margin-top:12px">
+        <div class="sb-row">
+          <span class="sb-row-label">MAE</span>
+          <span class="sb-row-value" id="accMAE">—</span>
+        </div>
+        <div class="sb-row">
+          <span class="sb-row-label">Evaluated days</span>
+          <span class="sb-row-value" id="accEvaluadas">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-card" style="padding:12px">
+      <div class="sb-section-title" style="padding:0 2px;margin-bottom:10px">Models</div>
+
+      <div class="model-card arima">
+        <div class="model-card-header">
+          <span class="model-card-name">ARIMA</span>
+          <span class="model-badge-best">BEST PERFORMER</span>
+        </div>
+        <div class="model-metrics" id="arimaMeta">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="arimaMAE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="arimaMAEBar"></div></div>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="arimaRMSE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="arimaRMSEBar"></div></div>
+          </div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-badge">
+            <span class="stat-badge-label">R²</span>
+            <span class="stat-badge-val" id="arimaR2">—</span>
+          </div>
+          <div class="stat-badge">
+            <span class="stat-badge-label">DW</span>
+            <span class="stat-badge-val" id="arimaDW">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="model-card lstm">
+        <div class="model-card-header">
+          <span class="model-card-name">LSTM</span>
+        </div>
+        <div class="model-metrics">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="lstmMAE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="lstmMAEBar"></div></div>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="lstmRMSE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="lstmRMSEBar"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="model-card gru">
+        <div class="model-card-header">
+          <span class="model-card-name">GRU</span>
+        </div>
+        <div class="model-metrics">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="gruMAE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="gruMAEBar"></div></div>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="gruRMSE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="gruRMSEBar"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ── MAIN ──────────────────────────────────────────────── -->
+  <main class="main-content">
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Historical Series — IBEX 35</span>
+        <div class="days-selector">
+          <button class="days-btn" onclick="loadHistorical(30)">30D</button>
+          <button class="days-btn active" onclick="loadHistorical(90)">90D</button>
+          <button class="days-btn" onclick="loadHistorical(365)">1Y</button>
+          <button class="days-btn" onclick="loadHistorical(1825)">5Y</button>
+          <button class="days-btn" onclick="loadHistorical(3650)">MAX</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap">
+          <canvas id="historicalChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Predictions — Next 5 Business Days</span>
+        <button class="btn-refresh" id="predBtn" onclick="loadPredictions()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div class="card-body" style="padding-top:12px">
+        <table class="pred-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th class="arima-col" style="text-align:right">ARIMA ★</th>
+              <th style="text-align:right">LSTM</th>
+              <th style="text-align:right">GRU</th>
+            </tr>
+          </thead>
+          <tbody id="predTableBody">
+            <tr><td colspan="4"><div class="skeleton" style="width:80%"></div></td></tr>
+            <tr><td colspan="4"><div class="skeleton" style="width:70%"></div></td></tr>
+            <tr><td colspan="4"><div class="skeleton" style="width:85%"></div></td></tr>
+            <tr><td colspan="4"><div class="skeleton" style="width:60%"></div></td></tr>
+            <tr><td colspan="4"><div class="skeleton" style="width:75%"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent History + 5-Day Forecast</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap sm">
+          <canvas id="predChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Trading Horizon ───────────────────────────────── -->
+    <div class="card" id="horizonSection">
+      <div class="card-header">
+        <span class="card-title">Trading Horizon — Projection Tool</span>
+        <div class="horizon-selector" id="horizonBtns">
+          <button class="horizon-btn active" data-days="1" onclick="loadHorizon(1)">1D</button>
+          <button class="horizon-btn" data-days="2" onclick="loadHorizon(2)">2D</button>
+          <button class="horizon-btn" data-days="3" onclick="loadHorizon(3)">3D</button>
+          <button class="horizon-btn" data-days="5" onclick="loadHorizon(5)">5D</button>
+          <button class="horizon-btn" data-days="7" onclick="loadHorizon(7)">7D</button>
+          <button class="horizon-btn" data-days="10" onclick="loadHorizon(10)">10D</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <!-- KPI strip -->
+        <div class="backtest-kpi-strip" style="margin-bottom:12px">
+          <div class="bkpi-item"><span class="bkpi-label">Horizonte</span><span class="bkpi-val" id="hkpiDays">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">ARIMA D+1</span><span class="bkpi-val" id="hkpiArima">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">LSTM D+1</span><span class="bkpi-val" id="hkpiLstm">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">GRU D+1</span><span class="bkpi-val" id="hkpiGru">—</span></div>
+        </div>
+        <!-- Chart -->
+        <div class="chart-wrap sm">
+          <canvas id="horizonChart"></canvas>
+        </div>
+        <!-- Table -->
+        <table class="pred-table" style="margin-top:14px">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th class="arima-col" style="text-align:right">ARIMA ★</th>
+              <th style="text-align:right">vs Hoy</th>
+              <th style="text-align:right">LSTM</th>
+              <th style="text-align:right">GRU</th>
+            </tr>
+          </thead>
+          <tbody id="horizonTableBody">
+            <tr><td colspan="5" style="color:var(--t3);padding:18px 10px;font-size:12px">Selecciona un horizonte arriba</td></tr>
+          </tbody>
+        </table>
+        <div class="horizon-disclaimer">
+          Proyecciones orientativas generadas por ARIMA(5,1,0) (reentrenado en tiempo real) + LSTM + GRU.
+          El error crece con el horizonte. No constituyen asesoramiento financiero. MAE historico ARIMA: ~89 pts.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STL Decomposition ──────────────────────────────── -->
+    <div class="card" id="stlSection">
+      <div class="card-header">
+        <span class="card-title">STL Decomposition — Trend · Seasonal · Residual</span>
+      </div>
+      <div class="card-body">
+        <div class="stl-img-wrap">
+          <img id="stlImg" src="/plots/stl_decomposition.png" alt="STL Decomposition"
+               onload="this.classList.add('loaded')"
+               onerror="document.getElementById('stlSection').style.display='none'" />
+        </div>
+        <div class="stl-desc">
+          <strong>STL</strong> (Seasonal and Trend decomposition using Loess) separates the IBEX 35 series into
+          three components: <em>Trend</em> (long-run direction), <em>Seasonality</em> (periodic patterns within the year)
+          and <em>Residual</em> (unexplained noise). The dominant component is the aperiodic trend, consistent with
+          ARIMA(5,1,0) outperforming seasonal models. The residual shows heteroskedasticity — periods of high volatility
+          (2008 crisis, COVID-19 2020) where error variance spikes markedly.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Multi-Period Validation ────────────────────────── -->
+    <div class="card" id="validationSection">
+      <div class="card-header">
+        <span class="card-title">Multi-Period Validation — ARIMA(5,1,0) across 5 Market Regimes</span>
+      </div>
+      <div class="card-body">
+        <table class="pred-table" id="validationTable">
+          <thead>
+            <tr>
+              <th>Cutoff</th>
+              <th>Period</th>
+              <th style="text-align:right">N</th>
+              <th style="text-align:right">MAE</th>
+              <th style="text-align:right">RMSE</th>
+              <th style="text-align:right">MAPE%</th>
+              <th style="text-align:right">Dir.Acc%</th>
+              <th style="text-align:right">IC MAE 95%</th>
+            </tr>
+          </thead>
+          <tbody id="validationTableBody">
+            <tr><td colspan="8" style="color:var(--t3);padding:20px 10px;font-size:12px">Loading validation data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Backtest ────────────────────────────────────────── -->
+    <div class="card" id="backtestSection">
+      <div class="card-header">
+        <span class="card-title">Full Backtest 1993–2026 — ARIMA vs LSTM vs GRU</span>
+        <div class="days-selector">
+          <button class="days-btn active" onclick="loadBacktest(365)">1Y</button>
+          <button class="days-btn" onclick="loadBacktest(1825)">5Y</button>
+          <button class="days-btn" onclick="loadBacktest(99999)">Full</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" style="height:280px">
+          <canvas id="backtestChart"></canvas>
+        </div>
+        <div class="backtest-kpi-strip" id="backtestKPI">
+          <div class="bkpi-item"><span class="bkpi-label">Days OOS</span><span class="bkpi-val" id="bkpiDays">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE ARIMA</span><span class="bkpi-val" id="bkpiMAE">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">R²</span><span class="bkpi-val" id="bkpiR2">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Durbin-Watson</span><span class="bkpi-val" id="bkpiDW">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="accuracySection">
+      <div class="card-header">
+        <span class="card-title">Production Accuracy — Daily Predictions vs Actual</span>
+      </div>
+      <div class="card-body">
+        <div class="acc-hero">
+          <div class="acc-big" id="accBigNumber">—</div>
+          <div class="acc-label">Direction Accuracy</div>
+        </div>
+        <table class="acc-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Base</th>
+              <th>Prediction</th>
+              <th>Actual</th>
+              <th>Error</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody id="accuracyTableBody">
+            <tr>
+              <td colspan="6" style="color:var(--t3);padding:20px 10px;font-size:12px">
+                Loading prediction history...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer style="background:transparent;border:none;padding:0">
+      <div class="footer-disclaimer">
+        Prediccion orientativa. No constituye asesoramiento financiero.
+      </div>
+      <div class="footer-brand">Universidad Alfonso X el Sabio &nbsp;·&nbsp; &copy; 2026</div>
+    </footer>
+
+  </main>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════════════════════ -->
+<script>
+  const API = '';
+
+  let historicalChart = null;
+  let predChart       = null;
+  let metricsChart    = null;
+  let historicalData  = null;
+  let predData        = null;
+
+  /* ── Chart defaults ─────────────────────────────────────── */
+  Chart.defaults.color       = '#475569';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
+  Chart.defaults.font.family = "'JetBrains Mono', monospace";
+  Chart.defaults.font.size   = 11;
+
+  /* ══════════════════════════════════════════════════════════
+     v2 ANIMATION UTILITIES
+  ══════════════════════════════════════════════════════════ */
+
+  /* Animated number counter (easeOutCubic) */
+  function animateNumber(el, target, duration = 900, suffix = '') {
+    if (!el) return;
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) { el.textContent = target + suffix; return; }
+    const start = parseFloat(el.textContent) || 0;
+    const startTime = performance.now();
+    function step(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+      const current = start + (target - start) * eased;
+      el.textContent = current.toLocaleString('es-ES', { maximumFractionDigits: 1 }) + suffix;
+      if (progress < 1) requestAnimationFrame(step);
+      else el.textContent = target.toLocaleString('es-ES') + suffix;
+    }
+    requestAnimationFrame(step);
+  }
+
+  /* Price flash (color transition on header price) */
+  function animatePriceFlash(newPrice) {
+    const el = document.getElementById('headerPrice');
+    const oldText = el.textContent.replace(/[^0-9.,]/g, '');
+    const oldVal  = parseFloat(oldText.replace('.', '').replace(',', '.')) || 0;
+    if (oldVal === 0) return;
+    const dir = newPrice > oldVal ? 'up' : newPrice < oldVal ? 'down' : null;
+    if (!dir) return;
+    el.classList.remove('flash-up', 'flash-down');
+    void el.offsetWidth; // reflow
+    el.classList.add('flash-' + dir);
+    setTimeout(() => el.classList.remove('flash-up', 'flash-down'), 700);
+  }
+
+  /* Metric progress bars with IntersectionObserver */
+  function setupMetricBars(modelos) {
+    const allMAE  = modelos.map(m => m.MAE);
+    const allRMSE = modelos.map(m => m.RMSE);
+    const maxMAE  = Math.max(...allMAE);
+    const maxRMSE = Math.max(...allRMSE);
+
+    const barData = [
+      { id: 'arimaMAEBar',  val: null, max: maxMAE },
+      { id: 'arimaRMSEBar', val: null, max: maxRMSE },
+      { id: 'lstmMAEBar',   val: null, max: maxMAE },
+      { id: 'lstmRMSEBar',  val: null, max: maxRMSE },
+      { id: 'gruMAEBar',    val: null, max: maxMAE },
+      { id: 'gruRMSEBar',   val: null, max: maxRMSE },
+    ];
+
+    modelos.forEach(m => {
+      const name = (m.Modelo || '').toLowerCase();
+      if (name.includes('arima')) {
+        barData[0].val = m.MAE;
+        barData[1].val = m.RMSE;
+      } else if (name.includes('lstm')) {
+        barData[2].val = m.MAE;
+        barData[3].val = m.RMSE;
+      } else if (name.includes('gru')) {
+        barData[4].val = m.MAE;
+        barData[5].val = m.RMSE;
+      }
+    });
+
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    barData.forEach(({ id, val, max }) => {
+      if (val === null || val === undefined) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      const pct = Math.min((val / max) * 100, 100);
+
+      if (prefersReduced) {
+        el.style.width = pct + '%';
+        return;
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            setTimeout(() => { el.style.width = pct + '%'; }, 100);
+            observer.disconnect();
+          }
+        });
+      }, { threshold: 0.3 });
+      observer.observe(el.parentElement);
+    });
+  }
+
+  /* Refresh countdown bar */
+  function startRefreshCountdown() {
+    const bar = document.getElementById('refreshBar');
+    if (!bar) return;
+    bar.style.transition = 'none';
+    bar.style.width = '100%';
+    void bar.offsetWidth;
+    bar.style.transition = 'width 60s linear';
+    bar.style.width = '0%';
+
+    setTimeout(() => {
+      loadHistorical();
+      loadPredictions();
+      loadMetrics();
+      loadAccuracy();
+      loadBacktest();
+      loadValidation();
+      startRefreshCountdown();
+    }, 60000);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     PARTICLE SYSTEM
+  ══════════════════════════════════════════════════════════ */
+  (function initParticles() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const canvas = document.getElementById('particleCanvas');
+    const ctx    = canvas.getContext('2d');
+    let W, H, nodes;
+
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+
+    function createNodes(count = 45) {
+      return Array.from({ length: count }, () => ({
+        x:  Math.random() * W,
+        y:  Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        r:  Math.random() * 1.5 + 0.8,
+      }));
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+
+      nodes.forEach(n => {
+        n.x += n.vx;
+        n.y += n.vy;
+        if (n.x < 0 || n.x > W) n.vx *= -1;
+        if (n.y < 0 || n.y > H) n.vy *= -1;
+      });
+
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx   = nodes[i].x - nodes[j].x;
+          const dy   = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            const alpha = (1 - dist / 120) * 0.12;
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(0,212,170,${alpha})`;
+            ctx.lineWidth   = 0.8;
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      nodes.forEach(n => {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,212,170,0.3)';
+        ctx.fill();
+      });
+
+      requestAnimationFrame(draw);
+    }
+
+    resize();
+    nodes = createNodes();
+    window.addEventListener('resize', () => { resize(); nodes = createNodes(); });
+    draw();
+  })();
+
+  /* ══════════════════════════════════════════════════════════
+     CORE FUNCTIONS (identical logic to index.html, v2 enhancements added)
+  ══════════════════════════════════════════════════════════ */
+
+  /* Live clock */
+  function updateClock() {
+    document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString('es-ES', { hour12: false });
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  /* Health check */
+  async function checkHealth() {
+    try {
+      const res  = await fetch(`${API}/health`);
+      const data = await res.json();
+      const badge = document.getElementById('statusBadge');
+      const text  = document.getElementById('statusText');
+      if (data.status === 'ok') {
+        badge.classList.add('online');
+        text.textContent = 'ONLINE';
+      }
+    } catch {
+      document.getElementById('statusText').textContent = 'OFFLINE';
+    }
+  }
+
+  /* Historical */
+  async function loadHistorical(days = 90) {
+    document.querySelectorAll('.days-btn').forEach(b => b.classList.remove('active'));
+    event?.target?.classList.add('active');
+
+    try {
+      const res = await fetch(`${API}/historical?days=${days}`);
+      historicalData = await res.json();
+
+      const ctx = document.getElementById('historicalChart').getContext('2d');
+      if (historicalChart) historicalChart.destroy();
+
+      historicalChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: historicalData.dates,
+          datasets: [{
+            label: 'IBEX 35',
+            data: historicalData.prices,
+            borderColor: '#00d4aa',
+            backgroundColor: (ctx) => {
+              const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+              g.addColorStop(0, 'rgba(0,212,170,0.25)');
+              g.addColorStop(0.6, 'rgba(0,212,170,0.06)');
+              g.addColorStop(1, 'rgba(0,212,170,0)');
+              return g;
+            },
+            borderWidth: 1.5,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#00d4aa',
+            fill: true,
+            tension: 0.1,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#111118',
+              borderColor: 'rgba(255,255,255,0.08)',
+              borderWidth: 1,
+              titleColor: '#475569',
+              bodyColor: '#00d4aa',
+              padding: 10,
+              titleFont: { family: "'Inter', sans-serif", size: 10 },
+              bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: days <= 90 ? 'week' : 'month' },
+              grid: { display: false },
+              ticks: { color: '#475569', maxTicksLimit: 8 }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: { color: '#475569' }
+            },
+          }
+        }
+      });
+
+      const last     = historicalData.prices.at(-1);
+      const lastDate = historicalData.dates.at(-1);
+
+      /* v2: animated number counter */
+      const lastPriceEl  = document.getElementById('lastPrice');
+      const headerPriceEl = document.getElementById('headerPrice');
+
+      /* v2: flash direction before updating */
+      animatePriceFlash(last);
+
+      animateNumber(lastPriceEl, last, 900, ' pts');
+      animateNumber(headerPriceEl, last, 900);
+
+      document.getElementById('lastDate').textContent = lastDate;
+
+      if (predData) updatePredChart(historicalData, predData);
+    } catch (e) {
+      console.error('Error historico:', e);
+    }
+  }
+
+  /* Predictions */
+  async function loadPredictions() {
+    const btn = document.getElementById('predBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Calculating...';
+
+    try {
+      const [resLSTM, resGRU, resARIMA] = await Promise.all([
+        fetch(`${API}/predict/5days`),
+        fetch(`${API}/predict/gru`),
+        fetch(`${API}/predict/arima`),
+      ]);
+      predData          = await resLSTM.json();
+      const gruData     = await resGRU.json();
+      const arimaData   = resARIMA.ok ? await resARIMA.json() : null;
+
+      const preds     = predData.predicciones;
+      const lastPrice = predData.ultimo_precio;
+      const gruPreds  = gruData.predicciones || [];
+      const arimaPreds = arimaData ? arimaData.predicciones || [] : [];
+      window._latestGruPreds   = gruPreds;
+      window._latestArimaPreds = arimaPreds;
+
+      const p1 = preds[0];
+      if (p1) {
+        const badge = document.getElementById('headerBadge');
+        const dir   = p1.variacion >= 0;
+        badge.className = 'header-change-badge ' + (dir ? 'up' : 'down');
+        badge.textContent =
+          (dir ? '▲ +' : '▼ ') +
+          p1.variacion.toFixed(0) + ' pts  (' +
+          (p1.variacion_pct >= 0 ? '+' : '') + p1.variacion_pct + '%)';
+
+        const sd = document.getElementById('sidebarDirection');
+        sd.textContent = dir ? '▲ Bullish' : '▼ Bearish';
+        sd.className   = 'sb-row-value ' + (dir ? 'up' : 'down');
+      }
+
+      const gruByDate = {};
+      gruPreds.forEach(g => { gruByDate[g.fecha] = g; });
+      const arimaByDate = {};
+      arimaPreds.forEach(a => { arimaByDate[a.fecha] = a; });
+
+      const tbody = document.getElementById('predTableBody');
+
+      /* v2: build rows and animate them in with stagger */
+      const rows = preds.map((p, idx) => {
+        const gru    = gruByDate[p.fecha]   || null;
+        const arima  = arimaByDate[p.fecha] || null;
+        const lstmUp  = p.variacion >= 0;
+        const gruUp   = gru   ? gru.variacion   >= 0 : null;
+        const arimaUp = arima ? arima.variacion >= 0 : null;
+
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'opacity:0;transform:translateX(-8px);transition:opacity 0.25s ease,transform 0.25s ease';
+        tr.innerHTML = `
+          <td class="pred-date">${p.fecha}</td>
+          <td class="pred-price-cell arima-col">
+            ${arima ? `
+            <div class="pred-price">
+              <span class="dir-arrow ${arimaUp ? 'up' : 'down'}">${arimaUp ? '▲' : '▼'}</span>
+              ${arima.prediccion.toLocaleString('es-ES')}
+            </div>
+            <div class="pred-pct ${arimaUp ? 'up' : 'down'}">
+              ${arima.variacion_pct >= 0 ? '+' : ''}${arima.variacion_pct}%
+            </div>` : '<span style="color:var(--t3)">—</span>'}
+          </td>
+          <td class="pred-price-cell">
+            <div class="pred-price">
+              <span class="dir-arrow ${lstmUp ? 'up' : 'down'}">${lstmUp ? '▲' : '▼'}</span>
+              ${p.prediccion.toLocaleString('es-ES')}
+            </div>
+            <div class="pred-pct ${lstmUp ? 'up' : 'down'}">
+              ${p.variacion_pct >= 0 ? '+' : ''}${p.variacion_pct}%
+            </div>
+          </td>
+          <td class="pred-price-cell">
+            ${gru ? `
+            <div class="pred-price">
+              <span class="dir-arrow ${gruUp ? 'up' : 'down'}">${gruUp ? '▲' : '▼'}</span>
+              ${gru.prediccion.toLocaleString('es-ES')}
+            </div>
+            <div class="pred-pct ${gruUp ? 'up' : 'down'}">
+              ${gru.variacion_pct >= 0 ? '+' : ''}${gru.variacion_pct}%
+            </div>` : '<span style="color:var(--t3)">—</span>'}
+          </td>`;
+        return { el: tr, delay: idx * 120 };
+      });
+
+      tbody.innerHTML = '';
+      rows.forEach(({ el, delay }) => {
+        tbody.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity    = '1';
+          el.style.transform  = 'none';
+        }, delay + 50);
+      });
+
+      if (historicalData) updatePredChart(historicalData, predData);
+    } catch (e) {
+      document.getElementById('predTableBody').innerHTML =
+        `<tr><td colspan="4" style="color:var(--down);padding:.75rem;font-size:12px">Error loading predictions</td></tr>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh`;
+    }
+  }
+
+  /* Overlay chart */
+  function updatePredChart(hist, pred) {
+    const ctx = document.getElementById('predChart').getContext('2d');
+    if (predChart) predChart.destroy();
+
+    const n          = 60;
+    const histDates  = hist.dates.slice(-n);
+    const histPrices = hist.prices.slice(-n);
+    const predDates  = pred.predicciones.map(p => p.fecha);
+    const predPrices = pred.predicciones.map(p => p.prediccion);
+    const joinDate   = [histDates.at(-1),  ...predDates];
+    const joinPrices = [histPrices.at(-1), ...predPrices];
+
+    // Build ARIMA and GRU join series if available
+    const arimaJoin = window._latestArimaPreds
+      ? [histPrices.at(-1), ...window._latestArimaPreds.map(a => a.prediccion)]
+      : null;
+    const gruJoin = window._latestGruPreds
+      ? [histPrices.at(-1), ...window._latestGruPreds.map(g => g.prediccion)]
+      : null;
+
+    const datasets = [
+      {
+        label: 'Historico (60d)',
+        data: histDates.map((d, i) => ({ x: d, y: histPrices[i] })),
+        borderColor: '#00d4aa',
+        backgroundColor: 'rgba(0,212,170,0.05)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.1,
+      },
+    ];
+
+    if (arimaJoin) {
+      datasets.push({
+        label: 'ARIMA ★',
+        data: joinDate.map((d, i) => ({ x: d, y: arimaJoin[i] })),
+        borderColor: '#00d4aa',
+        borderDash: [6, 3],
+        borderWidth: 2.5,
+        pointRadius: 5,
+        pointBackgroundColor: '#00d4aa',
+        pointBorderColor: '#04060d',
+        pointBorderWidth: 2,
+        tension: 0.3,
+      });
+    }
+
+    datasets.push({
+      label: 'LSTM',
+      data: joinDate.map((d, i) => ({ x: d, y: joinPrices[i] })),
+      borderColor: '#fb923c',
+      borderDash: [4, 3],
+      borderWidth: 1.5,
+      pointRadius: 3,
+      pointBackgroundColor: '#fb923c',
+      pointBorderColor: '#04060d',
+      pointBorderWidth: 2,
+      tension: 0.3,
+    });
+
+    if (gruJoin) {
+      datasets.push({
+        label: 'GRU',
+        data: joinDate.map((d, i) => ({ x: d, y: gruJoin[i] })),
+        borderColor: '#8b5cf6',
+        borderDash: [3, 3],
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointBackgroundColor: '#8b5cf6',
+        pointBorderColor: '#04060d',
+        pointBorderWidth: 2,
+        tension: 0.3,
+      });
+    }
+
+    predChart = new Chart(ctx, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: '#475569', boxWidth: 20,
+              font: { family: "'Inter', sans-serif", size: 10 } }
+          },
+          tooltip: {
+            backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)',
+            borderWidth: 1, titleColor: '#475569', bodyColor: '#f1f5f9',
+            padding: 10,
+          }
+        },
+        scales: {
+          x: {
+            type: 'time', time: { unit: 'week' },
+            grid: { display: false },
+            ticks: { color: '#475569' }
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+            ticks: { color: '#475569' }
+          },
+        }
+      }
+    });
+  }
+
+  /* Metrics */
+  async function loadMetrics() {
+    try {
+      const res     = await fetch(`${API}/metrics`);
+      const data    = await res.json();
+      const modelos = data.modelos;
+
+      modelos.forEach(m => {
+        const name = (m.Modelo || '').toLowerCase();
+        if (name.includes('arima')) {
+          const el  = document.getElementById('arimaMAE');
+          const el2 = document.getElementById('arimaRMSE');
+          if (el)  el.textContent  = m.MAE.toLocaleString('es-ES');
+          if (el2) el2.textContent = m.RMSE.toLocaleString('es-ES');
+        } else if (name.includes('lstm')) {
+          const el  = document.getElementById('lstmMAE');
+          const el2 = document.getElementById('lstmRMSE');
+          if (el)  el.textContent  = m.MAE.toLocaleString('es-ES');
+          if (el2) el2.textContent = m.RMSE.toLocaleString('es-ES');
+        } else if (name.includes('gru')) {
+          const el  = document.getElementById('gruMAE');
+          const el2 = document.getElementById('gruRMSE');
+          if (el)  el.textContent  = m.MAE.toLocaleString('es-ES');
+          if (el2) el2.textContent = m.RMSE.toLocaleString('es-ES');
+        }
+      });
+
+      /* v2: metric progress bars */
+      setupMetricBars(modelos);
+
+      /* Optional bar chart (no canvas in this layout, kept for compatibility) */
+      const ctx = document.getElementById('metricsChart');
+      if (ctx) {
+        if (metricsChart) metricsChart.destroy();
+        metricsChart = new Chart(ctx.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: modelos.map(m => m.Modelo),
+            datasets: [
+              {
+                label: 'RMSE', data: modelos.map(m => m.RMSE),
+                backgroundColor: ['rgba(251,146,60,0.65)', 'rgba(0,212,170,0.65)'],
+                borderColor:     ['#fb923c', '#00d4aa'],
+                borderWidth: 1, borderRadius: 0
+              },
+              {
+                label: 'MAE', data: modelos.map(m => m.MAE),
+                backgroundColor: ['rgba(251,146,60,0.25)', 'rgba(0,212,170,0.25)'],
+                borderColor:     ['rgba(251,146,60,0.5)', 'rgba(0,212,170,0.5)'],
+                borderWidth: 1, borderRadius: 0
+              },
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#475569', boxWidth: 12,
+                font: { family: "'Inter', sans-serif", size: 10 } } },
+              tooltip: { backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)',
+                borderWidth: 1, titleColor: '#475569', bodyColor: '#f1f5f9' }
+            },
+            scales: {
+              x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#475569' } },
+              y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#475569' } },
+            }
+          }
+        });
+      }
+    } catch (e) { console.error('Error metricas:', e); }
+  }
+
+  /* Accuracy */
+  async function loadAccuracy() {
+    try {
+      const res  = await fetch(`${API}/accuracy`);
+      const data = await res.json();
+
+      if (data.direction_accuracy_pct !== null) {
+        const acc = data.direction_accuracy_pct;
+
+        /* v2: animated number counter */
+        const el  = document.getElementById('dirAccuracy');
+        const big = document.getElementById('accBigNumber');
+        el.style.color  = acc >= 50 ? 'var(--up)' : 'var(--down)';
+        big.style.color = acc >= 50 ? 'var(--up)' : 'var(--down)';
+        animateNumber(el,  acc, 900, '%');
+        animateNumber(big, acc, 900, '%');
+
+        document.getElementById('accMAE').textContent       = data.mae + ' pts';
+        document.getElementById('accEvaluadas').textContent = data.evaluadas;
+      } else {
+        document.getElementById('dirAccuracy').textContent  = 'N/A';
+        document.getElementById('accBigNumber').textContent = 'N/A';
+      }
+
+      const tbody = document.getElementById('accuracyTableBody');
+      if (!data.historial || data.historial.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--t3);padding:20px 10px;font-size:12px">
+          Predictions are recorded automatically. Check back tomorrow for the first result.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = data.historial.map(r => {
+        let resultBadge;
+        if (r.direction_correct === '1' || r.direction_correct === 1) {
+          resultBadge = '<span class="result-badge ok">OK</span>';
+        } else if (r.direction_correct === '0' || r.direction_correct === 0) {
+          resultBadge = '<span class="result-badge fail">FAIL</span>';
+        } else {
+          resultBadge = '<span class="result-badge pending">Pending</span>';
+        }
+        return `
+        <tr>
+          <td>${r.fecha_prediccion}</td>
+          <td>${Number(r.precio_base).toLocaleString('es-ES')}</td>
+          <td>${Number(r.prediccion_d1).toLocaleString('es-ES')}</td>
+          <td>${r.real_d1 ? Number(r.real_d1).toLocaleString('es-ES') : '<span style="color:var(--t3)">Pending</span>'}</td>
+          <td>${r.error_abs ? r.error_abs + ' (' + r.error_pct + '%)' : '—'}</td>
+          <td>${resultBadge}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) { console.error('Error accuracy:', e); }
+  }
+
+  /* ── Backtest ───────────────────────────────────────────── */
+  let backtestChart = null;
+  let _backtestDays = 365;
+
+  async function loadBacktest(days) {
+    if (days !== undefined) _backtestDays = days;
+    // Update active button
+    document.querySelectorAll('#backtestSection .days-btn').forEach(b => {
+      b.classList.remove('active');
+      if ((days === 365 && b.textContent === '1Y') ||
+          (days === 1825 && b.textContent === '5Y') ||
+          (days >= 9999 && b.textContent === 'Full')) b.classList.add('active');
+    });
+    try {
+      const res  = await fetch(`${API}/backtest?days=${_backtestDays}`);
+      const data = await res.json();
+      const ctx  = document.getElementById('backtestChart').getContext('2d');
+      if (backtestChart) backtestChart.destroy();
+
+      backtestChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [
+            {
+              label: 'Real',
+              data: data.dates.map((d, i) => ({ x: d, y: data.real[i] })),
+              borderColor: '#f1f5f9',
+              borderWidth: 1.2,
+              pointRadius: 0,
+              tension: 0.1,
+            },
+            {
+              label: 'ARIMA',
+              data: data.dates.map((d, i) => ({ x: d, y: data.arima[i] })),
+              borderColor: '#00d4aa',
+              borderDash: [5, 3],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.1,
+            },
+            {
+              label: 'LSTM',
+              data: data.dates.map((d, i) => ({ x: d, y: data.lstm[i] })),
+              borderColor: '#fb923c',
+              borderDash: [3, 3],
+              borderWidth: 1,
+              pointRadius: 0,
+              tension: 0.1,
+            },
+            {
+              label: 'GRU',
+              data: data.dates.map((d, i) => ({ x: d, y: data.gru[i] })),
+              borderColor: '#8b5cf6',
+              borderDash: [3, 3],
+              borderWidth: 1,
+              pointRadius: 0,
+              tension: 0.1,
+            },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 400 },
+          plugins: {
+            legend: { labels: { color: '#94a3b8', boxWidth: 18,
+              font: { family: "'Inter', sans-serif", size: 10 } } },
+            tooltip: {
+              backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)',
+              borderWidth: 1, titleColor: '#475569', bodyColor: '#f1f5f9', padding: 10,
+            }
+          },
+          scales: {
+            x: { type: 'time', time: { unit: _backtestDays <= 365 ? 'month' : 'year' },
+                 grid: { display: false }, ticks: { color: '#475569', maxTicksLimit: 8 } },
+            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#475569' } },
+          }
+        }
+      });
+
+      // Compute MAE for ARIMA OOS in JS
+      const pairs = data.real.map((r, i) => [r, data.arima[i]]).filter(([r, a]) => r != null && a != null);
+      const mae   = pairs.reduce((acc, [r, a]) => acc + Math.abs(r - a), 0) / pairs.length;
+      document.getElementById('bkpiDays').textContent = pairs.length.toLocaleString('es-ES');
+      document.getElementById('bkpiMAE').textContent  = mae.toFixed(1) + ' pts';
+    } catch (e) { console.error('Backtest error:', e); }
+  }
+
+  /* ── Validation ─────────────────────────────────────────── */
+  async function loadValidation() {
+    try {
+      const res  = await fetch(`${API}/validation`);
+      const data = await res.json();
+      const tbody = document.getElementById('validationTableBody');
+      tbody.innerHTML = '';
+      data.periodos.forEach((r, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'val-row-anim';
+        tr.style.animationDelay = (idx * 80) + 'ms';
+        tr.innerHTML = `
+          <td style="font-family:var(--mono);font-size:12px;color:var(--t2)">${r.corte}</td>
+          <td style="font-size:12px;color:var(--t2)">${r.descripcion}</td>
+          <td style="text-align:right;font-family:var(--mono)">${r.n}</td>
+          <td style="text-align:right;font-family:var(--mono);color:var(--green)">${(+r.mae).toFixed(1)}</td>
+          <td style="text-align:right;font-family:var(--mono)">${(+r.rmse).toFixed(1)}</td>
+          <td style="text-align:right;font-family:var(--mono)">${(+r.mape).toFixed(2)}%</td>
+          <td style="text-align:right;font-family:var(--mono);color:${+r.dir_acc>=55?'var(--up)':'var(--t2)'}">${(+r.dir_acc).toFixed(1)}%</td>
+          <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">[${(+r.mae_ci_lo).toFixed(0)},&nbsp;${(+r.mae_ci_hi).toFixed(0)}]</td>`;
+        tbody.appendChild(tr);
+      });
+    } catch (e) { console.error('Validation error:', e); }
+  }
+
+  /* ── Regression ─────────────────────────────────────────── */
+  async function loadRegression() {
+    try {
+      const res  = await fetch(`${API}/regression`);
+      const data = await res.json();
+      data.regresion.forEach(r => {
+        const name = (r.modelo || '').toLowerCase();
+        if (name.includes('arima')) {
+          const r2el = document.getElementById('arimaR2');
+          const dwel = document.getElementById('arimaDW');
+          const bkR2 = document.getElementById('bkpiR2');
+          const bkDW = document.getElementById('bkpiDW');
+          if (r2el) r2el.textContent = r.r2.toFixed(4);
+          if (dwel) dwel.textContent = r.dw.toFixed(3);
+          if (bkR2) bkR2.textContent = r.r2.toFixed(4);
+          if (bkDW) bkDW.textContent = r.dw.toFixed(3);
+        }
+      });
+    } catch (e) { console.error('Regression error:', e); }
+  }
+
+  /* ── Horizon Predictor ─────────────────────────────────── */
+  let horizonChart = null;
+
+  async function loadHorizon(days) {
+    document.querySelectorAll('#horizonBtns .horizon-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.getAttribute('data-days')) === days);
+    });
+
+    const tbody = document.getElementById('horizonTableBody');
+    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--t3);padding:14px 10px;font-size:12px">
+      <span class="spinner"></span> Calculando ${days} dia(s) habiles…</td></tr>`;
+
+    try {
+      const res  = await fetch(`${API}/predict/horizon?days=${days}`);
+      if (!res.ok) throw new Error(await res.text());
+      const data  = await res.json();
+      const preds = data.predicciones;
+      const lp    = data.ultimo_precio;
+
+      // KPIs
+      document.getElementById('hkpiDays').textContent = days + (days === 1 ? ' dia hab.' : ' dias hab.');
+      const d1 = preds[0];
+      if (d1) {
+        const fmt = v => v !== null ? (v >= lp ? '▲ ' : '▼ ') + v.toLocaleString('es-ES') : '—';
+        document.getElementById('hkpiArima').textContent = fmt(d1.arima);
+        document.getElementById('hkpiLstm').textContent  = fmt(d1.lstm);
+        document.getElementById('hkpiGru').textContent   = fmt(d1.gru);
+      }
+
+      // Chart
+      if (historicalData) {
+        const histD  = historicalData.dates.slice(-30);
+        const histP  = historicalData.prices.slice(-30);
+        const pDates = preds.map(p => p.fecha);
+        const joinD  = [histD.at(-1), ...pDates];
+        const hp     = histP.at(-1);
+
+        const ctx2 = document.getElementById('horizonChart').getContext('2d');
+        if (horizonChart) horizonChart.destroy();
+
+        const datasets2 = [
+          {
+            label: 'Historico (30d)',
+            data: histD.map((d, i) => ({ x: d, y: histP[i] })),
+            borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.05)',
+            borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1,
+          },
+          {
+            label: 'ARIMA \u2605',
+            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].arima })),
+            borderColor: '#00d4aa', borderDash: [6, 3], borderWidth: 2.5,
+            pointRadius: (c) => c.dataIndex === 0 ? 0 : 5,
+            pointBackgroundColor: '#00d4aa', pointBorderColor: '#0a0a0f', pointBorderWidth: 2, tension: 0.3,
+          },
+        ];
+        if (preds[0].lstm !== null) {
+          datasets2.push({
+            label: 'LSTM',
+            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].lstm })),
+            borderColor: '#fb923c', borderDash: [4, 3], borderWidth: 1.5,
+            pointRadius: (c) => c.dataIndex === 0 ? 0 : 3,
+            pointBackgroundColor: '#fb923c', pointBorderColor: '#0a0a0f', pointBorderWidth: 2, tension: 0.3,
+          });
+        }
+        if (preds[0].gru !== null) {
+          datasets2.push({
+            label: 'GRU',
+            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].gru })),
+            borderColor: '#8b5cf6', borderDash: [3, 3], borderWidth: 1.5,
+            pointRadius: (c) => c.dataIndex === 0 ? 0 : 3,
+            pointBackgroundColor: '#8b5cf6', pointBorderColor: '#0a0a0f', pointBorderWidth: 2, tension: 0.3,
+          });
+        }
+
+        horizonChart = new Chart(ctx2, {
+          type: 'line',
+          data: { datasets: datasets2 },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#475569', boxWidth: 18, font: { family: "'Inter',sans-serif", size: 10 } } },
+              tooltip: {
+                backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1,
+                titleColor: '#475569', bodyColor: '#f1f5f9', padding: 10,
+                callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toLocaleString('es-ES', {maximumFractionDigits:2})} pts` }
+              }
+            },
+            scales: {
+              x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'dd MMM' } },
+                   grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#475569', maxTicksLimit: 10 } },
+              y: { grid: { color: 'rgba(255,255,255,0.04)' },
+                   ticks: { color: '#475569', callback: v => v.toLocaleString('es-ES', { maximumFractionDigits: 0 }) } }
+            },
+            interaction: { mode: 'index', intersect: false },
+          }
+        });
+      }
+
+      // Table
+      tbody.innerHTML = '';
+      preds.forEach((p, idx) => {
+        const au = p.arima >= lp;
+        const lu = p.lstm  !== null && p.lstm  >= lp;
+        const gu = p.gru   !== null && p.gru   >= lp;
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'opacity:0;transform:translateX(-8px);transition:opacity .2s ease,transform .2s ease';
+        tr.innerHTML = `
+          <td class="pred-date">${p.fecha}</td>
+          <td class="pred-price-cell arima-col">
+            <div class="pred-price"><span class="dir-arrow ${au?'up':'down'}">${au?'▲':'▼'}</span>${p.arima.toLocaleString('es-ES')}</div>
+          </td>
+          <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${p.arima_var_pct>=0?'var(--up)':'var(--down)'}">
+            ${p.arima_var_pct>=0?'+':''}${p.arima_var_pct}%
+          </td>
+          <td class="pred-price-cell">
+            ${p.lstm!==null?`<div class="pred-price"><span class="dir-arrow ${lu?'up':'down'}">${lu?'▲':'▼'}</span>${p.lstm.toLocaleString('es-ES')}</div>`:'<span style="color:var(--t3)">—</span>'}
+          </td>
+          <td class="pred-price-cell">
+            ${p.gru!==null?`<div class="pred-price"><span class="dir-arrow ${gu?'up':'down'}">${gu?'▲':'▼'}</span>${p.gru.toLocaleString('es-ES')}</div>`:'<span style="color:var(--t3)">—</span>'}
+          </td>`;
+        tbody.appendChild(tr);
+        setTimeout(() => { tr.style.opacity = '1'; tr.style.transform = 'none'; }, idx * 80 + 50);
+      });
+
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" style="color:var(--down);padding:.75rem;font-size:12px">Error: ${e.message}</td></tr>`;
+    }
+  }
+
+  /* ── Init ───────────────────────────────────────────────── */
+  checkHealth();
+  loadHistorical(90);
+  loadPredictions();
+  loadMetrics();
+  loadAccuracy();
+  loadBacktest(365);
+  loadValidation();
+  loadRegression();
+  loadHorizon(5);
+
+  /* v2: start refresh countdown after initial load */
+  window.addEventListener('load', () => {
+    setTimeout(startRefreshCountdown, 1000);
+  });
+</script>
+</body>
+</html>

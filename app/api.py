@@ -75,6 +75,7 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/plots",  StaticFiles(directory=str(DATA_DIR / "plots")), name="plots")
 
 
 # ── Cache en memoria ───────────────────────────────────────────────────────
@@ -184,6 +185,11 @@ def predict_5days(df: pd.DataFrame) -> list:
 @app.get("/")
 def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+@app.get("/v2")
+def index_v2():
+    return FileResponse(str(STATIC_DIR / "index_v2.html"))
 
 
 @app.get("/health")
@@ -303,6 +309,180 @@ def predict_next_5_days_gru_endpoint():
             "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
             "predicciones":  result,
             "disclaimer":    "Prediccion orientativa. No constituye asesoramiento financiero.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/predict/arima")
+def predict_arima():
+    """Devuelve prediccion ARIMA a 5 dias desde predictions_5days.csv."""
+    try:
+        csv_path = DATA_DIR / "predictions_5days.csv"
+        if not csv_path.exists():
+            raise HTTPException(status_code=503, detail="predictions_5days.csv no encontrado")
+        df_pred = pd.read_csv(csv_path)
+        df_live = fetch_recent_ibex(days=10)
+        last_price = round(float(df_live["Close"].iloc[-1]), 2)
+        last_date  = df_live.index[-1].strftime("%Y-%m-%d")
+        result = []
+        for _, row in df_pred.iterrows():
+            pred  = round(float(row["prediccion_arima"]), 2)
+            diff  = round(float(row["variacion_arima"]), 2)
+            result.append({
+                "fecha":         str(row["fecha"]),
+                "prediccion":    pred,
+                "variacion":     diff,
+                "variacion_pct": round(diff / last_price * 100, 2) if last_price else 0,
+            })
+        return {
+            "modelo":        "ARIMA",
+            "ultimo_precio": last_price,
+            "ultima_fecha":  last_date,
+            "predicciones":  result,
+            "disclaimer":    "Prediccion orientativa. No constituye asesoramiento financiero.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/validation")
+def get_validation():
+    """Devuelve validacion multi-periodo desde validation_multiperiod.csv."""
+    try:
+        csv_path = DATA_DIR / "validation_multiperiod.csv"
+        if not csv_path.exists():
+            raise HTTPException(status_code=503, detail="validation_multiperiod.csv no encontrado")
+        df = pd.read_csv(csv_path)
+        return {"periodos": df.to_dict(orient="records")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/backtest")
+def get_backtest(days: int = 365):
+    """Devuelve los ultimos N dias del backtest completo."""
+    try:
+        csv_path = DATA_DIR / "backtest_full.csv"
+        if not csv_path.exists():
+            raise HTTPException(status_code=503, detail="backtest_full.csv no encontrado")
+        df = pd.read_csv(csv_path, parse_dates=["fecha"])
+        df = df.dropna(subset=["real", "arima"])
+        df = df.tail(min(days, len(df)))
+        return {
+            "dates": [d.strftime("%Y-%m-%d") for d in df["fecha"]],
+            "real":  [round(float(v), 2) for v in df["real"]],
+            "arima": [round(float(v), 2) for v in df["arima"]],
+            "lstm":  [round(float(v), 2) for v in df["lstm"]],
+            "gru":   [round(float(v), 2) for v in df["gru"]],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/regression")
+def get_regression():
+    """Devuelve R², DW y betas por modelo desde regression_summary.csv."""
+    try:
+        csv_path = DATA_DIR / "regression_summary.csv"
+        if not csv_path.exists():
+            raise HTTPException(status_code=503, detail="regression_summary.csv no encontrado")
+        df = pd.read_csv(csv_path)
+        df_completo = df[df["periodo"] == "Completo"]
+        result = []
+        for _, row in df_completo.iterrows():
+            result.append({
+                "modelo": row["modelo"],
+                "r2":     round(float(row["r2"]), 5),
+                "r2_adj": round(float(row["r2_adj"]), 5),
+                "dw":     round(float(row["durbin_watson"]), 4),
+                "sigma":  round(float(row["sigma"]), 2),
+                "beta1":  round(float(row["beta1"]), 6),
+            })
+        return {"regresion": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/predict/horizon")
+def predict_horizon(days: int = 5):
+    """Prediccion a N dias habiles (1-10): ARIMA retrain en vivo + LSTM + GRU autoregresivos."""
+    days = max(1, min(days, 10))
+    try:
+        import warnings
+        from statsmodels.tsa.arima.model import ARIMA as ARIMAModel
+
+        df = fetch_recent_ibex(days=150)
+        last_price = float(df["Close"].iloc[-1])
+        last_date  = df.index[-1]
+        future_dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start=last_date, periods=days + 1)[1:]]
+
+        # ── ARIMA: retrain rapido sobre datos recientes ────────
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            series    = df["Close"].values.astype(float)
+            arima_fit = ARIMAModel(series, order=(5, 1, 0)).fit()
+            arima_fc  = arima_fit.forecast(steps=days)
+        arima_preds = [round(float(v), 2) for v in arima_fc]
+
+        # ── LSTM: autoregresivo N pasos ────────────────────────
+        lstm_preds = None
+        if lstm_model is not None and scaler is not None:
+            features = df[["Close"]].dropna()
+            if len(features) >= SEQUENCE_LENGTH:
+                inp = scaler.transform(features.values[-SEQUENCE_LENGTH:]).tolist()
+                ps  = []
+                for _ in range(days):
+                    X = np.array(inp[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
+                    p = float(lstm_model.predict(X, verbose=0)[0, 0])
+                    ps.append(p)
+                    inp.append([p])
+                lstm_preds = [round(v, 2) for v in _inv_close(np.array(ps)).tolist()]
+
+        # ── GRU: autoregresivo N pasos ─────────────────────────
+        gru_preds = None
+        if gru_model is not None and scaler is not None:
+            features = df[["Close"]].dropna()
+            if len(features) >= SEQUENCE_LENGTH:
+                inp = scaler.transform(features.values[-SEQUENCE_LENGTH:]).tolist()
+                ps  = []
+                for _ in range(days):
+                    X = np.array(inp[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
+                    p = float(gru_model.predict(X, verbose=0)[0, 0])
+                    ps.append(p)
+                    inp.append([p])
+                gru_preds = [round(v, 2) for v in _inv_close(np.array(ps)).tolist()]
+
+        result = []
+        for i, fecha in enumerate(future_dates):
+            ap = arima_preds[i]
+            lp = lstm_preds[i] if lstm_preds else None
+            gp = gru_preds[i]  if gru_preds  else None
+            result.append({
+                "fecha":         fecha,
+                "arima":         ap,
+                "lstm":          lp,
+                "gru":           gp,
+                "arima_var_pct": round((ap - last_price) / last_price * 100, 2),
+                "lstm_var_pct":  round((lp - last_price) / last_price * 100, 2) if lp else None,
+                "gru_var_pct":   round((gp - last_price) / last_price * 100, 2) if gp else None,
+            })
+
+        return {
+            "ultimo_precio": round(last_price, 2),
+            "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
+            "days":          days,
+            "predicciones":  result,
         }
     except HTTPException:
         raise

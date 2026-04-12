@@ -3,692 +3,839 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IBEX 35 — Predictor LSTM</title>
+  <title>IBEX 35 — Predictor</title>
+
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
   <style>
-    /* ─────────────────────────────────────────────
-       DESIGN TOKENS
-    ───────────────────────────────────────────── */
+    /* ── Design tokens ───────────────────────────────────── */
     :root {
-      --bg:          #04060d;
-      --bg-panel:    #080c17;
-      --bg-row:      rgba(255,255,255,0.018);
-      --bg-hover:    rgba(34,211,238,0.04);
-
-      --cyan:        #22d3ee;
-      --cyan-dim:    rgba(34,211,238,0.12);
-      --cyan-glow:   rgba(34,211,238,0.25);
-      --orange:      #fb923c;
-      --orange-dim:  rgba(251,146,60,0.12);
-      --green:       #34d399;
-      --green-dim:   rgba(52,211,153,0.1);
-      --red:         #f87171;
-      --red-dim:     rgba(248,113,113,0.1);
-      --amber:       #fbbf24;
-
-      --line:        rgba(34,211,238,0.1);
-      --line-strong: rgba(34,211,238,0.2);
-
-      --t1: #e2eaf5;
-      --t2: #7a8fa8;
-      --t3: #3d5068;
-
-      --mono: 'DM Mono', 'Courier New', monospace;
-      --head: 'Chakra Petch', sans-serif;
+      --bg:           #0a0a0f;
+      --surface:      #111118;
+      --surface-2:    #16161f;
+      --border:       rgba(255,255,255,0.08);
+      --border-subtle:rgba(255,255,255,0.04);
+      --green:        #00d4aa;
+      --green-dim:    rgba(0,212,170,0.12);
+      --blue:         #3b82f6;
+      --blue-dim:     rgba(59,130,246,0.12);
+      --purple:       #8b5cf6;
+      --up:           #22c55e;
+      --down:         #ef4444;
+      --t1:           #f1f5f9;
+      --t2:           #94a3b8;
+      --t3:           #475569;
+      --mono:         'JetBrains Mono', monospace;
+      --sans:         'Inter', sans-serif;
     }
 
-    /* ─────────────────────────────────────────────
-       RESET
-    ───────────────────────────────────────────── */
+    /* ── Reset ───────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ─────────────────────────────────────────────
-       BODY — dot grid background
-    ───────────────────────────────────────────── */
+    /* ── Base ────────────────────────────────────────────── */
     body {
-      font-family: var(--mono);
+      font-family: var(--sans);
       background-color: var(--bg);
-      background-image:
-        radial-gradient(circle, rgba(34,211,238,0.07) 1px, transparent 1px);
-      background-size: 28px 28px;
       color: var(--t1);
       min-height: 100vh;
       line-height: 1.5;
+      font-size: 14px;
     }
 
-    /* ─────────────────────────────────────────────
+    /* ── Animations ──────────────────────────────────────── */
+    @keyframes pulse-live {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Scrollbar ───────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+
+    /* ═══════════════════════════════════════════════════════
        HEADER
-    ───────────────────────────────────────────── */
+    ═══════════════════════════════════════════════════════ */
     header {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(4,6,13,0.92);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border-bottom: 1px solid var(--line-strong);
-    }
-
-    .header-bar {
+      height: 60px;
+      background: #111118;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 0 1.75rem;
-      height: 56px;
     }
 
-    .header-left {
+    .header-inner {
+      width: 100%;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 0 24px;
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 24px;
     }
 
-    .logo-mark {
+    /* Left: ticker */
+    .header-ticker {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      align-items: baseline;
+      gap: 8px;
+      flex-shrink: 0;
     }
-
-    .logo-icon {
-      width: 32px; height: 32px;
-      border: 1.5px solid var(--cyan);
-      display: flex; align-items: center; justify-content: center;
-      position: relative;
-      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-      background: var(--cyan-dim);
-    }
-    .logo-icon::after {
-      content: '';
-      position: absolute;
-      inset: 3px;
-      background: var(--cyan);
-      clip-path: polygon(0 20%, 100% 0, 100% 80%, 0 100%);
-      opacity: 0.6;
-    }
-
-    .logo-text {
-      font-family: var(--head);
+    .header-ticker-symbol {
+      font-family: var(--sans);
       font-weight: 700;
-      font-size: 1.05rem;
-      letter-spacing: 0.12em;
+      font-size: 15px;
       color: var(--t1);
-      text-transform: uppercase;
+      letter-spacing: 0.02em;
     }
-    .logo-text span { color: var(--cyan); }
-
-    .header-tag {
-      font-family: var(--mono);
-      font-size: 0.68rem;
-      color: var(--cyan);
-      border: 1px solid var(--cyan-dim);
-      padding: 2px 8px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+    .header-ticker-symbol span {
+      color: var(--green);
     }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
-
-    .live-clock {
-      font-family: var(--mono);
-      font-size: 0.85rem;
+    .header-ticker-label {
+      font-family: var(--sans);
+      font-size: 12px;
       color: var(--t3);
-      letter-spacing: 0.1em;
       font-weight: 500;
     }
 
+    /* Center: price + badge */
+    .header-price-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+    .header-price {
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: 28px;
+      color: var(--t1);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .header-change-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .header-change-badge.up   { background: rgba(34,197,94,0.12);  color: var(--up); }
+    .header-change-badge.down { background: rgba(239,68,68,0.12);   color: var(--down); }
+    .header-change-badge.neutral { background: rgba(255,255,255,0.06); color: var(--t2); }
+
+    /* Right: timestamp + status */
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-shrink: 0;
+    }
+    .header-timestamp {
+      font-family: var(--sans);
+      font-size: 12px;
+      color: var(--t3);
+    }
+    .header-timestamp strong {
+      color: var(--t2);
+      font-weight: 500;
+    }
     .status-badge {
       display: flex;
       align-items: center;
-      gap: 7px;
-      font-family: var(--mono);
-      font-size: 0.72rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      gap: 6px;
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
       color: var(--t3);
-      transition: color 0.3s;
+      letter-spacing: 0.02em;
     }
     .status-badge.online { color: var(--green); }
-
     .status-dot {
-      width: 6px; height: 6px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: currentColor;
+      flex-shrink: 0;
     }
     .status-badge.online .status-dot {
       animation: pulse-live 2s ease infinite;
       box-shadow: 0 0 6px currentColor;
     }
 
-    /* accent line under header */
-    .header-line {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--cyan), var(--orange), transparent);
-      opacity: 0.4;
-    }
-
-    /* ─────────────────────────────────────────────
-       ANIMATIONS
-    ───────────────────────────────────────────── */
-    @keyframes pulse-live {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50%       { opacity: 0.5; transform: scale(0.8); }
-    }
-    @keyframes reveal {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes shimmer {
-      0%   { background-position: -600px 0; }
-      100% { background-position: 600px 0; }
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes flicker {
-      0%, 95%, 100% { opacity: 1; }
-      96%, 99%       { opacity: 0.7; }
-    }
-
-    .reveal { animation: reveal 0.45s cubic-bezier(.22,.68,0,1.2) both; }
-    .reveal-1 { animation-delay: 0.05s; }
-    .reveal-2 { animation-delay: 0.12s; }
-    .reveal-3 { animation-delay: 0.19s; }
-    .reveal-4 { animation-delay: 0.26s; }
-    .reveal-5 { animation-delay: 0.33s; }
-
-    /* ─────────────────────────────────────────────
-       LAYOUT
-    ───────────────────────────────────────────── */
-    .container {
-      max-width: 1360px;
+    /* ═══════════════════════════════════════════════════════
+       APP LAYOUT (sidebar + main)
+    ═══════════════════════════════════════════════════════ */
+    .app-body {
+      max-width: 1440px;
       margin: 0 auto;
-      padding: 1.5rem 1.75rem;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 0;
+      min-height: calc(100vh - 60px);
     }
 
-    .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin-bottom: 1px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin-bottom: 1px; }
-
-    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
-    @media (max-width: 640px) {
-      .grid-3 { grid-template-columns: 1fr; }
-      .container { padding: 1rem; }
-      .header-bar { padding: 0 1rem; }
-      .live-clock { display: none; }
-    }
-
-    /* wrapper that creates the 1px gap / grid line effect */
-    .panel-group {
-      background: var(--line);
-      border: 1px solid var(--line);
-      margin-bottom: 1.5rem;
-    }
-
-    /* ─────────────────────────────────────────────
-       PANELS (replace "cards")
-    ───────────────────────────────────────────── */
-    .panel {
-      background: var(--bg-panel);
-      padding: 1.25rem 1.5rem;
-      position: relative;
-    }
-    .panel-solo {
-      background: var(--bg-panel);
-      border: 1px solid var(--line);
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 1.5rem;
-      position: relative;
-    }
-
-    /* top-left corner accent */
-    .panel::before, .panel-solo::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 32px; height: 2px;
-      background: var(--cyan);
-    }
-
-    /* ─────────────────────────────────────────────
-       SECTION LABEL
-    ───────────────────────────────────────────── */
-    .sec-label {
-      font-family: var(--head);
-      font-size: 0.65rem;
-      font-weight: 600;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--t3);
-      margin-bottom: 1rem;
+    /* ═══════════════════════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════════════════════ */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
       display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .sec-label::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--line);
+      flex-direction: column;
+      gap: 16px;
     }
 
-    /* ─────────────────────────────────────────────
-       KPI PANELS
-    ───────────────────────────────────────────── */
-    .kpi-panel {
-      background: var(--bg-panel);
-      padding: 1.35rem 1.5rem;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.2s;
-      cursor: default;
-    }
-    .kpi-panel:hover { background: var(--bg-hover); }
-
-    .kpi-panel::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 2px;
-    }
-    .kpi-panel.c-cyan::before   { background: linear-gradient(90deg, var(--cyan), transparent 60%); }
-    .kpi-panel.c-green::before  { background: linear-gradient(90deg, var(--green), transparent 60%); }
-    .kpi-panel.c-orange::before { background: linear-gradient(90deg, var(--orange), transparent 60%); }
-
-    /* corner decorative */
-    .kpi-panel::after {
-      content: '';
-      position: absolute;
-      bottom: 0; right: 0;
-      width: 60px; height: 60px;
-      border-top: 1px solid var(--line);
-      border-left: 1px solid var(--line);
-      opacity: 0.5;
+    .sb-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
     }
 
-    .kpi-lbl {
-      font-family: var(--head);
-      font-size: 0.62rem;
-      letter-spacing: 0.14em;
+    .sb-section-title {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--t3);
-      margin-bottom: 0.6rem;
+      margin-bottom: 12px;
     }
 
-    .kpi-val {
+    .sb-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .sb-row:last-child { margin-bottom: 0; }
+    .sb-row-label {
+      font-size: 12px;
+      color: var(--t3);
+    }
+    .sb-row-value {
       font-family: var(--mono);
-      font-size: 1.75rem;
+      font-size: 13px;
       font-weight: 500;
       color: var(--t1);
-      letter-spacing: -0.02em;
+    }
+    .sb-row-value.up   { color: var(--up); }
+    .sb-row-value.down { color: var(--down); }
+
+    /* Accuracy big number */
+    .sb-acc-value {
+      font-family: var(--mono);
+      font-size: 32px;
+      font-weight: 500;
+      color: var(--t1);
       line-height: 1;
-      margin-bottom: 0.45rem;
-      animation: flicker 8s ease infinite;
+      margin-bottom: 4px;
     }
-    .kpi-panel.c-cyan  .kpi-val { color: var(--cyan);   text-shadow: 0 0 20px var(--cyan-glow); }
-    .kpi-panel.c-green .kpi-val { color: var(--green); }
-
-    .kpi-sub {
-      font-family: var(--mono);
-      font-size: 0.75rem;
+    .sb-acc-label {
+      font-size: 11px;
       color: var(--t3);
     }
-    .kpi-sub .up   { color: var(--green); }
-    .kpi-sub .down { color: var(--red); }
 
-    /* ─────────────────────────────────────────────
-       DAY SELECTOR
-    ───────────────────────────────────────────── */
-    .days-selector { display: flex; gap: 1px; margin-bottom: 1rem; }
-    .days-btn {
-      font-family: var(--head);
-      font-size: 0.72rem;
+    /* Model cards */
+    .model-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      border-left-width: 3px;
+    }
+    .model-card:last-child { margin-bottom: 0; }
+    .model-card.arima { border-left-color: var(--green); }
+    .model-card.lstm  { border-left-color: var(--blue); }
+    .model-card.gru   { border-left-color: var(--purple); }
+
+    .model-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .model-card-name {
+      font-family: var(--sans);
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      background: transparent;
-      color: var(--t3);
-      border: 1px solid var(--line);
-      padding: 5px 14px;
-      cursor: pointer;
-      transition: all 0.15s;
-      font-family: var(--head);
-    }
-    .days-btn:hover  { color: var(--cyan); border-color: var(--cyan-dim); background: var(--cyan-dim); }
-    .days-btn.active { background: var(--cyan); border-color: var(--cyan); color: var(--bg); font-weight: 700; }
-
-    /* ─────────────────────────────────────────────
-       CHARTS
-    ───────────────────────────────────────────── */
-    .chart-shell {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid var(--line);
-      padding: 0.75rem;
-      position: relative;
-    }
-    .chart-container { position: relative; height: 280px; }
-
-    /* ─────────────────────────────────────────────
-       TABLES
-    ───────────────────────────────────────────── */
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-family: var(--mono);
-      font-size: 0.82rem;
-    }
-    .data-table th {
-      font-family: var(--head);
-      font-size: 0.6rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--t3);
-      padding: 0.5rem 0.75rem;
-      text-align: left;
-      border-bottom: 1px solid var(--line-strong);
-      font-weight: 600;
-    }
-    .data-table td {
-      padding: 0.55rem 0.75rem;
-      color: var(--t2);
-      border-bottom: 1px solid rgba(255,255,255,0.03);
-      transition: background 0.12s, color 0.12s;
-    }
-    .data-table tr:last-child td { border-bottom: none; }
-    .data-table tbody tr:hover td {
-      background: var(--bg-hover);
       color: var(--t1);
     }
-    .data-table td:first-child { color: var(--t1); font-weight: 500; }
-
-    .val-up   { color: var(--green) !important; }
-    .val-down { color: var(--red)   !important; }
-
-    /* ─────────────────────────────────────────────
-       BUTTON
-    ───────────────────────────────────────────── */
-    .btn-terminal {
-      font-family: var(--head);
-      font-size: 0.72rem;
+    .model-badge-best {
+      font-size: 9px;
       font-weight: 600;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: transparent;
-      color: var(--cyan);
-      border: 1px solid var(--cyan);
-      padding: 8px 18px;
-      cursor: pointer;
-      margin-bottom: 1.1rem;
-      transition: all 0.15s;
-      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+      color: var(--green);
+      background: var(--green-dim);
+      border-radius: 3px;
+      padding: 2px 6px;
     }
-    .btn-terminal:hover    { background: var(--cyan); color: var(--bg); box-shadow: 0 0 20px var(--cyan-glow); }
-    .btn-terminal:active   { transform: scale(0.98); }
-    .btn-terminal:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-terminal svg      { width: 13px; height: 13px; }
+    .model-metrics {
+      display: flex;
+      gap: 16px;
+    }
+    .model-metric-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .model-metric-label {
+      font-size: 10px;
+      color: var(--t3);
+    }
+    .model-metric-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--t2);
+    }
 
-    /* ─────────────────────────────────────────────
-       LOADING
-    ───────────────────────────────────────────── */
+    /* ═══════════════════════════════════════════════════════
+       MAIN CONTENT
+    ═══════════════════════════════════════════════════════ */
+    .main-content {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── Generic card ────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .card-header {
+      padding: 16px 20px 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-title {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--t3);
+    }
+    .card-body {
+      padding: 16px 20px 20px 20px;
+    }
+
+    /* ── Day selector ────────────────────────────────────── */
+    .days-selector {
+      display: flex;
+      gap: 4px;
+    }
+    .days-btn {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      background: transparent;
+      color: var(--t3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .days-btn:hover {
+      color: var(--t2);
+      border-color: rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.04);
+    }
+    .days-btn.active {
+      background: rgba(0,212,170,0.15);
+      border-color: var(--green);
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    /* ── Chart ───────────────────────────────────────────── */
+    .chart-wrap {
+      position: relative;
+      height: 300px;
+    }
+    .chart-wrap.sm { height: 220px; }
+
+    /* ── Predictions table ───────────────────────────────── */
+    .pred-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .pred-table th {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--t3);
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .pred-table th:not(:first-child) { text-align: right; }
+
+    .pred-table td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: middle;
+      transition: background 0.1s;
+    }
+    .pred-table tr:last-child td { border-bottom: none; }
+    .pred-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+
+    .pred-date {
+      font-size: 13px;
+      color: var(--t2);
+    }
+    .pred-price-cell { text-align: right; }
+    .pred-price {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--t1);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    .pred-price .dir-arrow { font-size: 11px; }
+    .pred-price .dir-arrow.up   { color: var(--up); }
+    .pred-price .dir-arrow.down { color: var(--down); }
+    .pred-pct {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--t3);
+      text-align: right;
+      margin-top: 2px;
+    }
+    .pred-pct.up   { color: var(--up); }
+    .pred-pct.down { color: var(--down); }
+
+    /* ── Accuracy section ────────────────────────────────── */
+    .acc-hero {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .acc-big {
+      font-family: var(--mono);
+      font-size: 48px;
+      font-weight: 500;
+      line-height: 1;
+      color: var(--t1);
+    }
+    .acc-label {
+      font-size: 12px;
+      color: var(--t3);
+      padding-bottom: 6px;
+    }
+
+    .acc-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .acc-table th {
+      font-family: var(--sans);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--t3);
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .acc-table td {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--t2);
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background 0.1s;
+    }
+    .acc-table tr:last-child td { border-bottom: none; }
+    .acc-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+
+    .result-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 3px;
+    }
+    .result-badge.ok   { background: rgba(34,197,94,0.12);  color: var(--up); }
+    .result-badge.fail { background: rgba(239,68,68,0.12);   color: var(--down); }
+    .result-badge.pending { background: rgba(255,255,255,0.06); color: var(--t3); }
+
+    /* ── Skeleton ────────────────────────────────────────── */
+    .skeleton {
+      background: linear-gradient(90deg, #111118 25%, #1a1a24 50%, #111118 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 3px;
+      height: 12px;
+    }
+
+    /* ── Spinner ─────────────────────────────────────────── */
     .spinner {
       width: 12px; height: 12px;
-      border: 1.5px solid var(--cyan-dim);
-      border-top-color: var(--cyan);
+      border: 1.5px solid rgba(255,255,255,0.08);
+      border-top-color: var(--t2);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
       display: inline-block;
-    }
-    .skeleton {
-      background: linear-gradient(90deg, var(--line) 25%, rgba(34,211,238,0.07) 50%, var(--line) 75%);
-      background-size: 600px 100%;
-      animation: shimmer 1.5s infinite linear;
-      height: 12px;
-      border-radius: 2px;
+      vertical-align: middle;
     }
 
-    /* ─────────────────────────────────────────────
-       ACCURACY KPI ROW
-    ───────────────────────────────────────────── */
-    .acc-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1px;
-      background: var(--line);
-      border: 1px solid var(--line);
-      margin-bottom: 1.25rem;
-    }
-    .acc-cell {
-      background: var(--bg-panel);
-      padding: 1rem 1.25rem;
-      text-align: center;
-    }
-    .acc-val {
-      font-family: var(--mono);
-      font-size: 1.4rem;
+    /* ── Refresh button ──────────────────────────────────── */
+    .btn-refresh {
+      font-family: var(--sans);
+      font-size: 11px;
       font-weight: 500;
-      color: var(--t1);
-      letter-spacing: -0.01em;
-    }
-    .acc-lbl {
-      font-family: var(--head);
-      font-size: 0.6rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
       color: var(--t3);
-      margin-top: 4px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: all 0.15s;
     }
-    @media (max-width: 640px) { .acc-row { grid-template-columns: 1fr; } }
+    .btn-refresh:hover   { color: var(--t1); border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); }
+    .btn-refresh:active  { transform: scale(0.97); }
+    .btn-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-refresh svg { width: 12px; height: 12px; flex-shrink: 0; }
 
-    /* ─────────────────────────────────────────────
-       DIVIDER
-    ───────────────────────────────────────────── */
-    .divider {
-      height: 1px;
-      background: var(--line);
-      margin: 1rem 0;
-    }
-
-    /* ─────────────────────────────────────────────
-       DISCLAIMER
-    ───────────────────────────────────────────── */
-    .disclaimer {
-      border: 1px solid rgba(251,191,36,0.2);
-      border-left: 2px solid var(--amber);
-      background: rgba(251,191,36,0.04);
-      padding: 0.9rem 1.25rem;
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: rgba(251,191,36,0.7);
-      line-height: 1.65;
-      margin-top: 1.5rem;
+    /* ── Footer ──────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 20px 24px;
       display: flex;
-      gap: 12px;
-      align-items: flex-start;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
     }
-    .disclaimer svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: var(--amber); }
-    .disclaimer strong { color: var(--amber); font-weight: 500; }
+    .footer-disclaimer {
+      font-size: 11px;
+      color: var(--t3);
+      max-width: 560px;
+    }
+    .footer-brand {
+      font-family: var(--sans);
+      font-size: 11px;
+      color: var(--t3);
+      white-space: nowrap;
+    }
 
-    /* ─────────────────────────────────────────────
-       SCROLLBAR
-    ───────────────────────────────────────────── */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 0; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--cyan-dim); }
+    /* ── Responsive ──────────────────────────────────────── */
+    @media (max-width: 1024px) {
+      .app-body { grid-template-columns: 1fr; }
+      .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 16px;
+        gap: 12px;
+      }
+      .sb-card { flex: 1 1 200px; }
+      .model-card-section { display: flex; gap: 12px; width: 100%; }
+      .model-card { flex: 1; margin-bottom: 0; }
+    }
+    @media (max-width: 640px) {
+      .header-price { font-size: 20px; }
+      .header-timestamp { display: none; }
+      .main-content { padding: 16px; gap: 16px; }
+    }
   </style>
 </head>
 <body>
 
-<!-- ── HEADER ──────────────────────────────────────────────── -->
+<!-- ══════════════════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════════════════ -->
 <header>
-  <div class="header-bar">
-    <div class="header-left">
-      <div class="logo-mark">
-        <div class="logo-icon"></div>
-        <div class="logo-text">IBEX<span>35</span></div>
-      </div>
-      <div class="header-tag">LSTM Predictor</div>
+  <div class="header-inner">
+    <!-- Ticker -->
+    <div class="header-ticker">
+      <div class="header-ticker-symbol"><span>^</span>IBEX &nbsp;·&nbsp; <span>IBEX</span> 35</div>
+      <div class="header-ticker-label">Madrid</div>
     </div>
-    <div class="header-right">
-      <div class="live-clock" id="clock">--:--:--</div>
+
+    <!-- Price + change -->
+    <div class="header-price-group">
+      <div class="header-price" id="headerPrice">—</div>
+      <div class="header-change-badge neutral" id="headerBadge">— —%</div>
+    </div>
+
+    <!-- Meta: timestamp + status -->
+    <div class="header-meta">
+      <div class="header-timestamp">
+        Last update &nbsp;<strong id="clock">--:--:--</strong>
+      </div>
       <div class="status-badge" id="statusBadge">
         <span class="status-dot"></span>
         <span id="statusText">INIT</span>
       </div>
     </div>
   </div>
-  <div class="header-line"></div>
 </header>
 
-<!-- ── CONTAINER ───────────────────────────────────────────── -->
-<div class="container">
+<!-- ══════════════════════════════════════════════════════════
+     APP BODY
+═══════════════════════════════════════════════════════════ -->
+<div class="app-body">
 
-  <!-- KPIs -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:1.5rem;">
-    <div class="kpi-panel c-cyan reveal reveal-1">
-      <div class="kpi-lbl">Ultimo precio</div>
-      <div class="kpi-val" id="lastPrice">—</div>
-      <div class="kpi-sub" id="lastDate">Conectando a mercado...</div>
-    </div>
-    <div class="kpi-panel c-green reveal reveal-2">
-      <div class="kpi-lbl">Prediccion manana</div>
-      <div class="kpi-val" id="pred1">—</div>
-      <div class="kpi-sub" id="pred1Diff">Calculando modelo...</div>
-    </div>
-    <div class="kpi-panel c-orange reveal reveal-3">
-      <div class="kpi-lbl">Prediccion en 5 dias</div>
-      <div class="kpi-val" id="pred5">—</div>
-      <div class="kpi-sub" id="pred5Diff">Calculando modelo...</div>
-    </div>
-  </div>
+  <!-- ── SIDEBAR ───────────────────────────────────────────── -->
+  <aside class="sidebar">
 
-  <!-- Histórico -->
-  <div class="panel-solo reveal reveal-4">
-    <div class="sec-label">Serie historica IBEX 35</div>
-    <div class="days-selector">
-      <button class="days-btn" onclick="loadHistorical(30)">1M</button>
-      <button class="days-btn active" onclick="loadHistorical(90)">3M</button>
-      <button class="days-btn" onclick="loadHistorical(365)">1A</button>
-      <button class="days-btn" onclick="loadHistorical(1825)">5A</button>
-    </div>
-    <div class="chart-shell">
-      <div class="chart-container"><canvas id="historicalChart"></canvas></div>
-    </div>
-  </div>
+    <!-- Status / KPIs -->
+    <div class="sb-card">
+      <div class="sb-section-title">Market KPIs</div>
 
-  <!-- Predicciones + Métricas -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:1.5rem;" class="reveal reveal-4">
-
-    <div class="panel">
-      <div class="sec-label">Prediccion proximos 5 dias habiles</div>
-      <button class="btn-terminal" id="predBtn" onclick="loadPredictions()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
-        Actualizar
-      </button>
-      <table class="data-table">
-        <thead><tr><th>Fecha</th><th>Prediccion</th><th>Var.</th><th>%</th></tr></thead>
-        <tbody id="predTableBody">
-          <tr><td colspan="4"><div class="skeleton" style="width:90%"></div></td></tr>
-          <tr><td colspan="4"><div class="skeleton" style="width:75%"></div></td></tr>
-          <tr><td colspan="4"><div class="skeleton" style="width:85%"></div></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="panel">
-      <div class="sec-label">Comparativa modelos — Test set</div>
-      <table class="data-table">
-        <thead><tr><th>Modelo</th><th>RMSE</th><th>MAE</th><th>MSE</th></tr></thead>
-        <tbody id="metricsTableBody">
-          <tr><td colspan="4"><div class="skeleton"></div></td></tr>
-          <tr><td colspan="4"><div class="skeleton" style="width:80%"></div></td></tr>
-        </tbody>
-      </table>
-      <div class="divider"></div>
-      <div class="chart-shell">
-        <div class="chart-container" style="height:150px"><canvas id="metricsChart"></canvas></div>
+      <div class="sb-row">
+        <span class="sb-row-label">Last Price</span>
+        <span class="sb-row-value" id="lastPrice">—</span>
+      </div>
+      <div class="sb-row">
+        <span class="sb-row-label">Date</span>
+        <span class="sb-row-value" style="font-size:11px;color:var(--t2)" id="lastDate">—</span>
+      </div>
+      <div class="sb-row">
+        <span class="sb-row-label">Direction</span>
+        <span class="sb-row-value" id="sidebarDirection">—</span>
       </div>
     </div>
 
-  </div>
-
-  <!-- Histórico + Predicción overlay -->
-  <div class="panel-solo reveal reveal-5">
-    <div class="sec-label">Historico reciente + prediccion a 5 dias</div>
-    <div class="chart-shell">
-      <div class="chart-container" style="height:230px"><canvas id="predChart"></canvas></div>
-    </div>
-  </div>
-
-  <!-- Accuracy -->
-  <div class="panel-solo reveal reveal-5" id="accuracySection">
-    <div class="sec-label">Accuracy en produccion — Predicciones diarias vs Real</div>
-
-    <div class="acc-row">
-      <div class="acc-cell">
-        <div class="acc-val" id="dirAccuracy">—</div>
-        <div class="acc-lbl">Aciertos de direccion</div>
-      </div>
-      <div class="acc-cell">
-        <div class="acc-val" id="accMAE">—</div>
-        <div class="acc-lbl">MAE real (pts)</div>
-      </div>
-      <div class="acc-cell">
-        <div class="acc-val" id="accEvaluadas">—</div>
-        <div class="acc-lbl">Dias evaluados</div>
+    <!-- Accuracy KPI -->
+    <div class="sb-card">
+      <div class="sb-section-title">Production Accuracy</div>
+      <div class="sb-acc-value" id="dirAccuracy">—</div>
+      <div class="sb-acc-label">Direction Accuracy</div>
+      <div style="margin-top:12px">
+        <div class="sb-row">
+          <span class="sb-row-label">MAE</span>
+          <span class="sb-row-value" id="accMAE">—</span>
+        </div>
+        <div class="sb-row">
+          <span class="sb-row-label">Evaluated days</span>
+          <span class="sb-row-value" id="accEvaluadas">—</span>
+        </div>
       </div>
     </div>
 
-    <table class="data-table" id="accuracyTable">
-      <thead>
-        <tr><th>Fecha</th><th>Base</th><th>Prediccion</th><th>Real</th><th>Error</th><th>Dir.</th></tr>
-      </thead>
-      <tbody id="accuracyTableBody">
-        <tr><td colspan="6" style="color:var(--t3);padding:1.5rem 0.75rem;font-size:0.8rem;">
-          Cargando historial de predicciones...
-        </td></tr>
-      </tbody>
-    </table>
-  </div>
+    <!-- Model cards -->
+    <div class="sb-card" style="padding:12px">
+      <div class="sb-section-title" style="padding:0 2px;margin-bottom:10px">Models</div>
 
-  <!-- Disclaimer -->
-  <div class="disclaimer">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-    <div>
-      <strong>AVISO LEGAL:</strong> Las predicciones mostradas son el resultado de un modelo de
-      aprendizaje automatico con fines academicos y <strong>NO CONSTITUYEN ASESORAMIENTO FINANCIERO</strong>.
-      Los mercados bursatiles son impredecibles y los resultados pasados no garantizan rendimientos futuros.
+      <div class="model-card arima">
+        <div class="model-card-header">
+          <span class="model-card-name">ARIMA</span>
+          <span class="model-badge-best">BEST PERFORMER</span>
+        </div>
+        <div class="model-metrics" id="arimaMeta">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="arimaMAE">—</span>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="arimaRMSE">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="model-card lstm">
+        <div class="model-card-header">
+          <span class="model-card-name">LSTM</span>
+        </div>
+        <div class="model-metrics">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="lstmMAE">—</span>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="lstmRMSE">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="model-card gru">
+        <div class="model-card-header">
+          <span class="model-card-name">GRU</span>
+        </div>
+        <div class="model-metrics">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="gruMAE">—</span>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="gruRMSE">—</span>
+          </div>
+        </div>
+      </div>
+
     </div>
-  </div>
+  </aside>
 
-</div><!-- /container -->
+  <!-- ── MAIN ──────────────────────────────────────────────── -->
+  <main class="main-content">
 
-<!-- ── SCRIPTS ──────────────────────────────────────────────── -->
+    <!-- Historical chart -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Historical Series — IBEX 35</span>
+        <div class="days-selector">
+          <button class="days-btn" onclick="loadHistorical(30)">30D</button>
+          <button class="days-btn active" onclick="loadHistorical(90)">90D</button>
+          <button class="days-btn" onclick="loadHistorical(365)">1Y</button>
+          <button class="days-btn" onclick="loadHistorical(1825)">5Y</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap">
+          <canvas id="historicalChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Predictions table: LSTM vs GRU -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Predictions — Next 5 Business Days</span>
+        <button class="btn-refresh" id="predBtn" onclick="loadPredictions()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div class="card-body" style="padding-top:12px">
+        <table class="pred-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th style="text-align:right">LSTM</th>
+              <th style="text-align:right">GRU</th>
+            </tr>
+          </thead>
+          <tbody id="predTableBody">
+            <tr><td colspan="3"><div class="skeleton" style="width:80%"></div></td></tr>
+            <tr><td colspan="3"><div class="skeleton" style="width:70%"></div></td></tr>
+            <tr><td colspan="3"><div class="skeleton" style="width:85%"></div></td></tr>
+            <tr><td colspan="3"><div class="skeleton" style="width:60%"></div></td></tr>
+            <tr><td colspan="3"><div class="skeleton" style="width:75%"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Historical + prediction overlay chart -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent History + 5-Day Forecast</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap sm">
+          <canvas id="predChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Accuracy -->
+    <div class="card" id="accuracySection">
+      <div class="card-header">
+        <span class="card-title">Production Accuracy — Daily Predictions vs Actual</span>
+      </div>
+      <div class="card-body">
+
+        <div class="acc-hero">
+          <div class="acc-big" id="accBigNumber">—</div>
+          <div class="acc-label">Direction Accuracy</div>
+        </div>
+
+        <table class="acc-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Base</th>
+              <th>Prediction</th>
+              <th>Actual</th>
+              <th>Error</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody id="accuracyTableBody">
+            <tr>
+              <td colspan="6" style="color:var(--t3);padding:20px 10px;font-size:12px">
+                Loading prediction history...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer style="background:transparent;border:none;padding:0">
+      <div class="footer-disclaimer">
+        Prediccion orientativa. No constituye asesoramiento financiero.
+      </div>
+      <div class="footer-brand">Universidad Alfonso X el Sabio &nbsp;·&nbsp; &copy; 2026</div>
+    </footer>
+
+  </main>
+</div><!-- /app-body -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════════════════════ -->
 <script>
   const API = '';
 
   let historicalChart = null;
-  let predChart = null;
-  let metricsChart = null;
-  let historicalData = null;
-  let predData = null;
+  let predChart       = null;
+  let metricsChart    = null;
+  let historicalData  = null;
+  let predData        = null;
 
-  /* Chart global defaults — terminal palette */
-  Chart.defaults.color = '#3d5068';
-  Chart.defaults.borderColor = 'rgba(34,211,238,0.06)';
-  Chart.defaults.font.family = "'DM Mono', monospace";
-  Chart.defaults.font.size = 11;
+  /* Chart global defaults */
+  Chart.defaults.color      = '#475569';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
+  Chart.defaults.font.family = "'JetBrains Mono', monospace";
+  Chart.defaults.font.size   = 11;
 
   /* ── Live clock ─────────────────────────────────────────── */
   function updateClock() {
@@ -698,10 +845,10 @@
   updateClock();
   setInterval(updateClock, 1000);
 
-  /* ── Health check ─────────────────────────────────────── */
+  /* ── Health check ───────────────────────────────────────── */
   async function checkHealth() {
     try {
-      const res = await fetch(`${API}/health`);
+      const res  = await fetch(`${API}/health`);
       const data = await res.json();
       const badge = document.getElementById('statusBadge');
       const text  = document.getElementById('statusText');
@@ -714,7 +861,7 @@
     }
   }
 
-  /* ── Histórico ─────────────────────────────────────────── */
+  /* ── Historical ─────────────────────────────────────────── */
   async function loadHistorical(days = 90) {
     document.querySelectorAll('.days-btn').forEach(b => b.classList.remove('active'));
     event?.target?.classList.add('active');
@@ -733,15 +880,16 @@
           datasets: [{
             label: 'IBEX 35',
             data: historicalData.prices,
-            borderColor: '#22d3ee',
+            borderColor: '#00d4aa',
             backgroundColor: (ctx) => {
               const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
-              g.addColorStop(0, 'rgba(34,211,238,0.12)');
-              g.addColorStop(1, 'rgba(34,211,238,0)');
+              g.addColorStop(0, 'rgba(0,212,170,0.12)');
+              g.addColorStop(1, 'rgba(0,212,170,0)');
               return g;
             },
             borderWidth: 1.5,
             pointRadius: 0,
+            pointHoverRadius: 4,
             fill: true,
             tension: 0.1,
           }]
@@ -751,22 +899,27 @@
           plugins: {
             legend: { display: false },
             tooltip: {
-              backgroundColor: '#080c17',
-              borderColor: 'rgba(34,211,238,0.2)',
+              backgroundColor: '#111118',
+              borderColor: 'rgba(255,255,255,0.08)',
               borderWidth: 1,
-              titleColor: '#3d5068',
-              bodyColor: '#22d3ee',
+              titleColor: '#475569',
+              bodyColor: '#00d4aa',
               padding: 10,
-              titleFont: { family: "'Chakra Petch', sans-serif", size: 10 },
-              bodyFont: { family: "'DM Mono', monospace", size: 12 },
+              titleFont: { family: "'Inter', sans-serif", size: 10 },
+              bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
             }
           },
           scales: {
-            x: { type: 'time', time: { unit: days <= 90 ? 'week' : 'month' },
-                 grid: { color: 'rgba(34,211,238,0.05)' },
-                 ticks: { color: '#3d5068', maxTicksLimit: 8 } },
-            y: { grid: { color: 'rgba(34,211,238,0.05)' },
-                 ticks: { color: '#3d5068' } },
+            x: {
+              type: 'time',
+              time: { unit: days <= 90 ? 'week' : 'month' },
+              grid: { display: false },
+              ticks: { color: '#475569', maxTicksLimit: 8 }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: { color: '#475569' }
+            },
           }
         }
       });
@@ -776,63 +929,96 @@
       document.getElementById('lastPrice').textContent = last.toLocaleString('es-ES') + ' pts';
       document.getElementById('lastDate').textContent  = lastDate;
 
+      /* Header price */
+      document.getElementById('headerPrice').textContent = last.toLocaleString('es-ES');
+
       if (predData) updatePredChart(historicalData, predData);
     } catch (e) {
-      console.error('Error histórico:', e);
+      console.error('Error historico:', e);
     }
   }
 
-  /* ── Predicciones ──────────────────────────────────────── */
+  /* ── Predictions ────────────────────────────────────────── */
   async function loadPredictions() {
     const btn = document.getElementById('predBtn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Calculando...';
+    btn.innerHTML = '<span class="spinner"></span> Calculating...';
 
     try {
-      const res  = await fetch(`${API}/predict/5days`);
-      predData   = await res.json();
+      const [resLSTM, resGRU] = await Promise.all([
+        fetch(`${API}/predict/5days`),
+        fetch(`${API}/predict/gru`),
+      ]);
+      predData        = await resLSTM.json();
+      const gruData   = await resGRU.json();
+
       const preds     = predData.predicciones;
       const lastPrice = predData.ultimo_precio;
+      const gruPreds  = gruData.predicciones || [];
 
+      /* KPI update: header badge direction from first LSTM prediction */
       const p1 = preds[0];
-      const p5 = preds[4];
+      if (p1) {
+        const badge = document.getElementById('headerBadge');
+        const dir   = p1.variacion >= 0;
+        badge.className = 'header-change-badge ' + (dir ? 'up' : 'down');
+        badge.textContent =
+          (dir ? '▲ +' : '▼ ') +
+          p1.variacion.toFixed(0) + ' pts  (' +
+          (p1.variacion_pct >= 0 ? '+' : '') + p1.variacion_pct + '%)';
 
-      document.getElementById('pred1').textContent = p1.prediccion.toLocaleString('es-ES') + ' pts';
-      document.getElementById('pred1Diff').innerHTML =
-        `<span class="${p1.variacion >= 0 ? 'up' : 'down'}">
-          ${p1.variacion >= 0 ? '+' : ''}${p1.variacion.toFixed(0)} pts (${p1.variacion_pct >= 0 ? '+' : ''}${p1.variacion_pct}%)
-        </span>`;
+        /* Sidebar direction */
+        const sd = document.getElementById('sidebarDirection');
+        sd.textContent = dir ? '▲ Bullish' : '▼ Bearish';
+        sd.className   = 'sb-row-value ' + (dir ? 'up' : 'down');
+      }
 
-      document.getElementById('pred5').textContent = p5.prediccion.toLocaleString('es-ES') + ' pts';
-      document.getElementById('pred5Diff').innerHTML =
-        `<span class="${p5.variacion >= 0 ? 'up' : 'down'}">
-          ${p5.variacion >= 0 ? '+' : ''}${p5.variacion.toFixed(0)} pts (${p5.variacion_pct >= 0 ? '+' : ''}${p5.variacion_pct}%)
-        </span>`;
+      /* Build GRU lookup by date */
+      const gruByDate = {};
+      gruPreds.forEach(g => { gruByDate[g.fecha] = g; });
 
+      /* Predictions table */
       const tbody = document.getElementById('predTableBody');
-      tbody.innerHTML = preds.map(p => `
+      tbody.innerHTML = preds.map(p => {
+        const gru = gruByDate[p.fecha] || null;
+        const lstmUp  = p.variacion >= 0;
+        const gruUp   = gru ? gru.variacion >= 0 : null;
+        return `
         <tr>
-          <td>${p.fecha}</td>
-          <td>${p.prediccion.toLocaleString('es-ES')}</td>
-          <td class="${p.variacion >= 0 ? 'val-up' : 'val-down'}">
-            ${p.variacion >= 0 ? '+' : ''}${p.variacion.toFixed(0)}
+          <td class="pred-date">${p.fecha}</td>
+          <td class="pred-price-cell">
+            <div class="pred-price">
+              <span class="dir-arrow ${lstmUp ? 'up' : 'down'}">${lstmUp ? '▲' : '▼'}</span>
+              ${p.prediccion.toLocaleString('es-ES')}
+            </div>
+            <div class="pred-pct ${lstmUp ? 'up' : 'down'}">
+              ${p.variacion_pct >= 0 ? '+' : ''}${p.variacion_pct}%
+            </div>
           </td>
-          <td class="${p.variacion >= 0 ? 'val-up' : 'val-down'}">
-            ${p.variacion_pct >= 0 ? '+' : ''}${p.variacion_pct}%
+          <td class="pred-price-cell">
+            ${gru ? `
+            <div class="pred-price">
+              <span class="dir-arrow ${gruUp ? 'up' : 'down'}">${gruUp ? '▲' : '▼'}</span>
+              ${gru.prediccion.toLocaleString('es-ES')}
+            </div>
+            <div class="pred-pct ${gruUp ? 'up' : 'down'}">
+              ${gru.variacion_pct >= 0 ? '+' : ''}${gru.variacion_pct}%
+            </div>` : '<span style="color:var(--t3)">—</span>'}
           </td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
 
       if (historicalData) updatePredChart(historicalData, predData);
     } catch (e) {
       document.getElementById('predTableBody').innerHTML =
-        `<tr><td colspan="4" style="color:var(--red);padding:.75rem">Error al cargar predicciones</td></tr>`;
+        `<tr><td colspan="3" style="color:var(--down);padding:.75rem;font-size:12px">Error loading predictions</td></tr>`;
     } finally {
       btn.disabled = false;
-      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Actualizar`;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh`;
     }
   }
 
-  /* ── Gráfico pred + histórico ──────────────────────────── */
+  /* ── Pred + historical overlay chart ────────────────────── */
   function updatePredChart(hist, pred) {
     const ctx = document.getElementById('predChart').getContext('2d');
     if (predChart) predChart.destroy();
@@ -852,8 +1038,8 @@
           {
             label: 'Historico (60d)',
             data: histDates.map((d, i) => ({ x: d, y: histPrices[i] })),
-            borderColor: '#22d3ee',
-            backgroundColor: 'rgba(34,211,238,0.05)',
+            borderColor: '#00d4aa',
+            backgroundColor: 'rgba(0,212,170,0.05)',
             borderWidth: 1.5,
             pointRadius: 0,
             fill: true,
@@ -876,72 +1062,105 @@
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { labels: { color: '#3d5068', boxWidth: 20,
-            font: { family: "'Chakra Petch', sans-serif", size: 10 } } },
+          legend: {
+            labels: {
+              color: '#475569', boxWidth: 20,
+              font: { family: "'Inter', sans-serif", size: 10 }
+            }
+          },
           tooltip: {
-            backgroundColor: '#080c17', borderColor: 'rgba(34,211,238,0.2)',
-            borderWidth: 1, titleColor: '#3d5068', bodyColor: '#e2eaf5',
+            backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)',
+            borderWidth: 1, titleColor: '#475569', bodyColor: '#f1f5f9',
             padding: 10,
           }
         },
         scales: {
-          x: { type: 'time', time: { unit: 'week' },
-               grid: { color: 'rgba(34,211,238,0.05)' }, ticks: { color: '#3d5068' } },
-          y: { grid: { color: 'rgba(34,211,238,0.05)' }, ticks: { color: '#3d5068' } },
+          x: {
+            type: 'time', time: { unit: 'week' },
+            grid: { display: false },
+            ticks: { color: '#475569' }
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+            ticks: { color: '#475569' }
+          },
         }
       }
     });
   }
 
-  /* ── Métricas ──────────────────────────────────────────── */
+  /* ── Metrics ────────────────────────────────────────────── */
   async function loadMetrics() {
     try {
       const res    = await fetch(`${API}/metrics`);
       const data   = await res.json();
       const modelos = data.modelos;
 
-      document.getElementById('metricsTableBody').innerHTML = modelos.map(m => `
-        <tr>
-          <td>${m.Modelo}</td>
-          <td>${m.RMSE.toLocaleString('es-ES')}</td>
-          <td>${m.MAE.toLocaleString('es-ES')}</td>
-          <td>${m.MSE.toLocaleString('es-ES')}</td>
-        </tr>`).join('');
-
-      const ctx = document.getElementById('metricsChart').getContext('2d');
-      if (metricsChart) metricsChart.destroy();
-      metricsChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: modelos.map(m => m.Modelo),
-          datasets: [
-            { label: 'RMSE', data: modelos.map(m => m.RMSE),
-              backgroundColor: ['rgba(251,146,60,0.65)', 'rgba(34,211,238,0.65)'],
-              borderColor:     ['#fb923c', '#22d3ee'],
-              borderWidth: 1, borderRadius: 0 },
-            { label: 'MAE',  data: modelos.map(m => m.MAE),
-              backgroundColor: ['rgba(251,146,60,0.25)', 'rgba(34,211,238,0.25)'],
-              borderColor:     ['rgba(251,146,60,0.5)', 'rgba(34,211,238,0.5)'],
-              borderWidth: 1, borderRadius: 0 },
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: '#3d5068', boxWidth: 12,
-              font: { family: "'Chakra Petch', sans-serif", size: 10 } } },
-            tooltip: { backgroundColor: '#080c17', borderColor: 'rgba(34,211,238,0.2)', borderWidth: 1, titleColor: '#3d5068', bodyColor: '#e2eaf5' }
-          },
-          scales: {
-            x: { grid: { color: 'rgba(34,211,238,0.04)' }, ticks: { color: '#3d5068' } },
-            y: { grid: { color: 'rgba(34,211,238,0.04)' }, ticks: { color: '#3d5068' } },
-          }
+      modelos.forEach(m => {
+        const name = (m.Modelo || '').toLowerCase();
+        if (name.includes('arima')) {
+          const el = document.getElementById('arimaMAE');
+          const el2 = document.getElementById('arimaRMSE');
+          if (el)  el.textContent  = m.MAE.toLocaleString('es-ES');
+          if (el2) el2.textContent = m.RMSE.toLocaleString('es-ES');
+        } else if (name.includes('lstm')) {
+          const el = document.getElementById('lstmMAE');
+          const el2 = document.getElementById('lstmRMSE');
+          if (el)  el.textContent  = m.MAE.toLocaleString('es-ES');
+          if (el2) el2.textContent = m.RMSE.toLocaleString('es-ES');
+        } else if (name.includes('gru')) {
+          const el = document.getElementById('gruMAE');
+          const el2 = document.getElementById('gruRMSE');
+          if (el)  el.textContent  = m.MAE.toLocaleString('es-ES');
+          if (el2) el2.textContent = m.RMSE.toLocaleString('es-ES');
         }
       });
-    } catch (e) { console.error('Error métricas:', e); }
+
+      const ctx = document.getElementById('metricsChart');
+      if (ctx) {
+        if (metricsChart) metricsChart.destroy();
+        metricsChart = new Chart(ctx.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: modelos.map(m => m.Modelo),
+            datasets: [
+              {
+                label: 'RMSE', data: modelos.map(m => m.RMSE),
+                backgroundColor: ['rgba(251,146,60,0.65)', 'rgba(0,212,170,0.65)'],
+                borderColor:     ['#fb923c', '#00d4aa'],
+                borderWidth: 1, borderRadius: 0
+              },
+              {
+                label: 'MAE',  data: modelos.map(m => m.MAE),
+                backgroundColor: ['rgba(251,146,60,0.25)', 'rgba(0,212,170,0.25)'],
+                borderColor:     ['rgba(251,146,60,0.5)', 'rgba(0,212,170,0.5)'],
+                borderWidth: 1, borderRadius: 0
+              },
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#475569', boxWidth: 12,
+                  font: { family: "'Inter', sans-serif", size: 10 } }
+              },
+              tooltip: {
+                backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)',
+                borderWidth: 1, titleColor: '#475569', bodyColor: '#f1f5f9'
+              }
+            },
+            scales: {
+              x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#475569' } },
+              y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#475569' } },
+            }
+          }
+        });
+      }
+    } catch (e) { console.error('Error metricas:', e); }
   }
 
-  /* ── Accuracy ──────────────────────────────────────────── */
+  /* ── Accuracy ───────────────────────────────────────────── */
   async function loadAccuracy() {
     try {
       const res  = await fetch(`${API}/accuracy`);
@@ -949,37 +1168,50 @@
 
       if (data.direction_accuracy_pct !== null) {
         const acc = data.direction_accuracy_pct;
+
+        /* Sidebar */
         const el  = document.getElementById('dirAccuracy');
-        el.textContent  = acc + '%';
-        el.style.color  = acc >= 50 ? 'var(--green)' : 'var(--red)';
+        el.textContent = acc + '%';
+        el.style.color = acc >= 50 ? 'var(--up)' : 'var(--down)';
+
+        /* Main section big number */
+        const big = document.getElementById('accBigNumber');
+        big.textContent = acc + '%';
+        big.style.color = acc >= 50 ? 'var(--up)' : 'var(--down)';
+
         document.getElementById('accMAE').textContent       = data.mae + ' pts';
         document.getElementById('accEvaluadas').textContent = data.evaluadas;
       } else {
-        document.getElementById('dirAccuracy').textContent = 'N/A';
+        document.getElementById('dirAccuracy').textContent  = 'N/A';
+        document.getElementById('accBigNumber').textContent = 'N/A';
       }
 
       const tbody = document.getElementById('accuracyTableBody');
       if (!data.historial || data.historial.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--t3);padding:1.5rem 0.75rem;font-size:0.78rem;">
-          Las predicciones se registran automaticamente. Vuelve manana para ver el primer resultado.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--t3);padding:20px 10px;font-size:12px">
+          Predictions are recorded automatically. Check back tomorrow for the first result.</td></tr>`;
         return;
       }
 
-      tbody.innerHTML = data.historial.map(r => `
+      tbody.innerHTML = data.historial.map(r => {
+        let resultBadge;
+        if (r.direction_correct === '1' || r.direction_correct === 1) {
+          resultBadge = '<span class="result-badge ok">OK</span>';
+        } else if (r.direction_correct === '0' || r.direction_correct === 0) {
+          resultBadge = '<span class="result-badge fail">FAIL</span>';
+        } else {
+          resultBadge = '<span class="result-badge pending">Pending</span>';
+        }
+        return `
         <tr>
           <td>${r.fecha_prediccion}</td>
           <td>${Number(r.precio_base).toLocaleString('es-ES')}</td>
           <td>${Number(r.prediccion_d1).toLocaleString('es-ES')}</td>
-          <td>${r.real_d1 ? Number(r.real_d1).toLocaleString('es-ES') : '<span style="color:var(--t3)">Pendiente</span>'}</td>
+          <td>${r.real_d1 ? Number(r.real_d1).toLocaleString('es-ES') : '<span style="color:var(--t3)">Pending</span>'}</td>
           <td>${r.error_abs ? r.error_abs + ' (' + r.error_pct + '%)' : '—'}</td>
-          <td style="text-align:center;font-size:1rem">
-            ${r.direction_correct === '1' || r.direction_correct === 1
-              ? '<span style="color:var(--green)">&#10003;</span>'
-              : r.direction_correct === '0' || r.direction_correct === 0
-              ? '<span style="color:var(--red)">&#10007;</span>'
-              : '<span style="color:var(--t3)">—</span>'}
-          </td>
-        </tr>`).join('');
+          <td>${resultBadge}</td>
+        </tr>`;
+      }).join('');
     } catch (e) { console.error('Error accuracy:', e); }
   }
 
