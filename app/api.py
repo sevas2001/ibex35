@@ -103,7 +103,9 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-app.mount("/plots",  StaticFiles(directory=str(DATA_DIR / "plots")), name="plots")
+_plots_dir = DATA_DIR / "plots"
+_plots_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/plots", StaticFiles(directory=str(_plots_dir)), name="plots")
 
 
 # ── Cache en memoria ───────────────────────────────────────────────────────
