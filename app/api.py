@@ -214,12 +214,12 @@ def predict_5days(df: pd.DataFrame) -> list:
 # ── Endpoints ──────────────────────────────────────────────────────────────
 @app.get("/")
 def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
-
-
-@app.get("/v2")
-def index_v2():
     return FileResponse(str(STATIC_DIR / "index_v2.html"))
+
+
+@app.get("/v1")
+def index_v1():
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 
 @app.get("/health")
