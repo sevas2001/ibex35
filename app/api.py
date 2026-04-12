@@ -110,16 +110,17 @@ app.mount("/plots", StaticFiles(directory=str(_plots_dir)), name="plots")
 
 # ── Cache en memoria ───────────────────────────────────────────────────────
 _cache: dict = {"df": None, "ts": None, "days": None, "source": None}
-CACHE_TTL = 3600  # 1 hora
+CACHE_TTL        = 3600   # 1 hora para datos live
+_yf_blocked_until: datetime | None = None  # backoff tras rate-limit
+YF_BACKOFF        = 1800  # 30 min sin reintentar yfinance tras fallo
 
 # ── Pre-cargar CSV histórico como fallback garantizado ─────────────────────
 _RAW_CSV = DATA_DIR / "raw" / "ibex35_raw.csv"
 try:
     _static_df = pd.read_csv(_RAW_CSV, index_col=0, parse_dates=True)
     _static_df = _static_df[["Close", "Volume"]].dropna()
-    # Pre-poblar caché con datos históricos (fuente: csv)
     _cache["df"]     = _static_df
-    _cache["ts"]     = datetime.now() - timedelta(seconds=CACHE_TTL - 60)  # expira en 60s
+    _cache["ts"]     = datetime.now()   # caché válida 1h desde ahora
     _cache["days"]   = 3650
     _cache["source"] = "csv"
     print(f"Fallback CSV cargado: {len(_static_df)} dias hasta {_static_df.index[-1].date()}")
@@ -132,7 +133,9 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
     """
     Descarga datos del IBEX 35 con caché de 1 hora.
     Fallback garantizado: si yfinance falla usa el CSV histórico bundleado.
+    Tras un rate-limit, yfinance se omite 30 min para evitar spam en logs.
     """
+    global _yf_blocked_until
     now = datetime.now()
 
     # Servir caché si está fresco y cubre los días pedidos
@@ -141,12 +144,17 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
             and (now - _cache["ts"]).total_seconds() < CACHE_TTL):
         return _cache["df"]
 
+    # Si yfinance está en backoff, ir directo al fallback CSV
+    if _yf_blocked_until and now < _yf_blocked_until:
+        if _cache["df"] is not None:
+            return _cache["df"]
+
     end       = now
     start     = end - timedelta(days=days + 30)
     start_str = start.strftime("%Y-%m-%d")
     end_str   = end.strftime("%Y-%m-%d")
 
-    for attempt in range(5):
+    for attempt in range(2):   # máx 2 intentos (era 5)
         try:
             data = yf.download("^IBEX", start=start_str, end=end_str,
                                auto_adjust=True, progress=False)
@@ -162,12 +170,12 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
                 return df
         except Exception:
             pass
-        if attempt < 4:
-            time.sleep(3)
+        if attempt < 1:
+            time.sleep(2)
 
-    # yfinance falló — usar caché existente (CSV o anterior live)
+    # yfinance falló — activar backoff 30 min y servir CSV
+    _yf_blocked_until = now + timedelta(seconds=YF_BACKOFF)
     if _cache["df"] is not None:
-        print("yfinance bloqueado, sirviendo desde caché/CSV")
         return _cache["df"]
 
     raise HTTPException(
