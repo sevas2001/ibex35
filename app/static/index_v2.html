@@ -854,10 +854,47 @@
     <div class="sb-card" style="padding:12px">
       <div class="sb-section-title" style="padding:0 2px;margin-bottom:10px">Models</div>
 
+      <div class="model-card gru">
+        <div class="model-card-header">
+          <span class="model-card-name">GRU v4</span>
+          <span class="model-badge-best">BEST DL</span>
+        </div>
+        <div class="model-metrics">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="gruMAE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="gruMAEBar"></div></div>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="gruRMSE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="gruRMSEBar"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="model-card lstm">
+        <div class="model-card-header">
+          <span class="model-card-name">LSTM v4</span>
+        </div>
+        <div class="model-metrics">
+          <div class="model-metric-item">
+            <span class="model-metric-label">MAE</span>
+            <span class="model-metric-value" id="lstmMAE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="lstmMAEBar"></div></div>
+          </div>
+          <div class="model-metric-item">
+            <span class="model-metric-label">RMSE</span>
+            <span class="model-metric-value" id="lstmRMSE">—</span>
+            <div class="metric-bar"><div class="metric-bar-fill" id="lstmRMSEBar"></div></div>
+          </div>
+        </div>
+      </div>
+
       <div class="model-card arima">
         <div class="model-card-header">
           <span class="model-card-name">ARIMA</span>
-          <span class="model-badge-best">BEST PERFORMER</span>
+          <span class="model-badge-best">BEST OVERALL</span>
         </div>
         <div class="model-metrics" id="arimaMeta">
           <div class="model-metric-item">
@@ -879,42 +916,6 @@
           <div class="stat-badge">
             <span class="stat-badge-label">DW</span>
             <span class="stat-badge-val" id="arimaDW">—</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="model-card lstm">
-        <div class="model-card-header">
-          <span class="model-card-name">LSTM</span>
-        </div>
-        <div class="model-metrics">
-          <div class="model-metric-item">
-            <span class="model-metric-label">MAE</span>
-            <span class="model-metric-value" id="lstmMAE">—</span>
-            <div class="metric-bar"><div class="metric-bar-fill" id="lstmMAEBar"></div></div>
-          </div>
-          <div class="model-metric-item">
-            <span class="model-metric-label">RMSE</span>
-            <span class="model-metric-value" id="lstmRMSE">—</span>
-            <div class="metric-bar"><div class="metric-bar-fill" id="lstmRMSEBar"></div></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="model-card gru">
-        <div class="model-card-header">
-          <span class="model-card-name">GRU</span>
-        </div>
-        <div class="model-metrics">
-          <div class="model-metric-item">
-            <span class="model-metric-label">MAE</span>
-            <span class="model-metric-value" id="gruMAE">—</span>
-            <div class="metric-bar"><div class="metric-bar-fill" id="gruMAEBar"></div></div>
-          </div>
-          <div class="model-metric-item">
-            <span class="model-metric-label">RMSE</span>
-            <span class="model-metric-value" id="gruRMSE">—</span>
-            <div class="metric-bar"><div class="metric-bar-fill" id="gruRMSEBar"></div></div>
           </div>
         </div>
       </div>
@@ -946,39 +947,42 @@
     <!-- ── Validacion Cutoff Mar-30 ─────────────────────────── -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">Validacion Cutoff 30-Mar-2026 — Prediccion vs Real (31-Mar &rarr; 10-Abr)</span>
+        <span class="card-title">Validacion Cutoff 30-Mar-2026 — Prediccion vs Real (31-Mar &rarr; 14-Abr)</span>
       </div>
       <div class="card-body">
         <div class="backtest-kpi-strip" style="margin-bottom:14px">
           <div class="bkpi-item"><span class="bkpi-label">Entrenado hasta</span><span class="bkpi-val" style="color:var(--t1)">30-Mar-2026</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">MAE</span><span class="bkpi-val" style="color:var(--down)">749 pts</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">Dir. Accuracy</span><span class="bkpi-val" style="color:var(--up)">7/7 (100%)</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">Contexto</span><span class="bkpi-val" style="color:var(--t2);font-size:10px">IBEX +7.3% en 10 dias</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE ARIMA (9d)</span><span class="bkpi-val" style="color:var(--down)">749 pts</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE GRU v4 (5d)</span><span class="bkpi-val" style="color:var(--down)">571 pts</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Dir. Acc. GRU v4</span><span class="bkpi-val" style="color:var(--up)">5/5 (100%)</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Contexto</span><span class="bkpi-val" style="color:var(--t2);font-size:10px">IBEX +7.8% en 11 dias</span></div>
         </div>
         <table class="pred-table">
           <thead>
             <tr>
               <th>Fecha</th>
-              <th style="text-align:right">ARIMA pred.</th>
+              <th style="text-align:right;color:var(--green)">GRU v4</th>
+              <th style="text-align:right">ARIMA</th>
               <th style="text-align:right">Real</th>
-              <th style="text-align:right">Error</th>
+              <th style="text-align:right">Err GRU</th>
               <th style="text-align:center">Dir.</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td class="pred-date">31-Mar-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,981.56</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,049.60</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+68</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">01-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,973.92</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,580.40</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+606</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">02-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,972.66</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,555.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+583</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr style="opacity:0.45"><td class="pred-date" colspan="5" style="text-align:center;font-size:11px;color:var(--down)">— Semana Santa: Vie. Santo 3-Abr + Lun. Pascua 6-Abr — mercado cerrado —</td></tr>
-            <tr><td class="pred-date">07-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,977.65</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,444.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+467</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">08-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,974.16</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,132.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,158</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">09-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,973.69</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,104.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,131</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">10-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px">16,973.81</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,204.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,230</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">31-Mar-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,985.88</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,981.56</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,049.60</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+64</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">01-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,983.26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,973.92</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,580.40</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+597</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">02-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,980.51</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,972.66</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,555.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+575</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr style="opacity:0.45"><td class="pred-date" colspan="6" style="text-align:center;font-size:11px;color:var(--down)">— Semana Santa: Vie. Santo 3-Abr + Lun. Pascua 6-Abr — mercado cerrado —</td></tr>
+            <tr><td class="pred-date">07-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,973.38</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,977.65</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,444.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+471</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">08-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,983.64</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,974.16</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,132.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,149</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">09-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,973.69</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,104.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">10-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,973.81</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,204.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">13-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,023.80</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--down)">↓</td></tr>
+            <tr><td class="pred-date">14-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,286.10</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--up)">↑</td></tr>
           </tbody>
         </table>
         <div class="horizon-disclaimer" style="margin-top:10px">
-          MAE elevado porque el IBEX subio +7.3% en 10 dias (evento extremo post-aranceles Trump).
-          La direccion fue correcta los 7 dias. ARIMA captura tendencia, no eventos de cola.
+          MAE elevado por evento extremo post-aranceles Trump (+7.8% en 11 dias). Ambos modelos predicen tendencia correcta (100% dir. acc.) pero subestiman la magnitud del shock. GRU v4 solo predice 5 dias lectivos desde el cutoff; datos reales completos hasta 14-Abr.
         </div>
       </div>
     </div>
