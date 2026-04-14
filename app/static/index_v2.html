@@ -1000,9 +1000,9 @@
         <!-- KPI strip -->
         <div class="backtest-kpi-strip" style="margin-bottom:12px">
           <div class="bkpi-item"><span class="bkpi-label">Horizonte</span><span class="bkpi-val" id="hkpiDays">—</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">ARIMA D+1</span><span class="bkpi-val" id="hkpiArima">—</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">LSTM D+1</span><span class="bkpi-val" id="hkpiLstm">—</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">GRU D+1</span><span class="bkpi-val" id="hkpiGru">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">GRU v4 D+1</span><span class="bkpi-val" id="hkpiArima">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">LSTM v4 D+1</span><span class="bkpi-val" id="hkpiLstm">—</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">ARIMA D+1</span><span class="bkpi-val" id="hkpiGru">—</span></div>
         </div>
         <!-- Chart -->
         <div class="chart-wrap sm">
@@ -1013,10 +1013,10 @@
           <thead>
             <tr>
               <th>Date</th>
-              <th class="arima-col" style="text-align:right">ARIMA ★</th>
+              <th style="text-align:right;color:var(--green)">GRU v4 ★</th>
               <th style="text-align:right">vs Hoy</th>
-              <th style="text-align:right">LSTM</th>
-              <th style="text-align:right">GRU</th>
+              <th style="text-align:right">LSTM v4</th>
+              <th style="text-align:right">ARIMA</th>
             </tr>
           </thead>
           <tbody id="horizonTableBody">
@@ -1024,8 +1024,8 @@
           </tbody>
         </table>
         <div class="horizon-disclaimer">
-          Proyecciones orientativas generadas por ARIMA(5,1,0) (reentrenado en tiempo real) + LSTM + GRU.
-          El error crece con el horizonte. No constituyen asesoramiento financiero. MAE historico ARIMA: ~89 pts.
+          Proyecciones orientativas: GRU v4 (MAE=142, principal), LSTM v4 (MAE=144), ARIMA(5,1,0) (baseline estadístico).
+          El error crece con el horizonte. No constituyen asesoramiento financiero.
         </div>
       </div>
     </div>
@@ -1437,24 +1437,27 @@
   /* Predictions */
   async function loadPredictions() {
     const btn = document.getElementById('predBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Calculating...';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Calculating...'; }
 
     try {
-      const [resLSTM, resGRU, resARIMA] = await Promise.all([
+      const [resGRU, resLSTM, resAttn, resARIMA] = await Promise.all([
         fetch(`${API}/predict/5days`),
-        fetch(`${API}/predict/gru`),
+        fetch(`${API}/predict/lstm`),
+        fetch(`${API}/predict/attention`),
         fetch(`${API}/predict/arima`),
       ]);
-      predData          = await resLSTM.json();
-      const gruData     = await resGRU.json();
+      predData          = await resGRU.json();          // GRU v4 = modelo principal
+      const lstmData    = resLSTM.ok  ? await resLSTM.json()  : null;
+      const attnData    = resAttn.ok  ? await resAttn.json()  : null;
       const arimaData   = resARIMA.ok ? await resARIMA.json() : null;
 
       const preds     = predData.predicciones;
       const lastPrice = predData.ultimo_precio;
-      const gruPreds  = gruData.predicciones || [];
+      const lstmPreds  = lstmData  ? lstmData.predicciones  || [] : [];
+      const attnPreds  = attnData  ? attnData.predicciones  || [] : [];
       const arimaPreds = arimaData ? arimaData.predicciones || [] : [];
-      window._latestGruPreds   = gruPreds;
+      window._latestLstmPreds  = lstmPreds;
+      window._latestAttnPreds  = attnPreds;
       window._latestArimaPreds = arimaPreds;
 
       const p1 = preds[0];
@@ -1472,79 +1475,76 @@
         sd.className   = 'sb-row-value ' + (dir ? 'up' : 'down');
       }
 
-      const gruByDate = {};
-      gruPreds.forEach(g => { gruByDate[g.fecha] = g; });
+      const lstmByDate  = {};
+      lstmPreds.forEach(l => { lstmByDate[l.fecha] = l; });
+      const attnByDate  = {};
+      attnPreds.forEach(a => { attnByDate[a.fecha] = a; });
       const arimaByDate = {};
       arimaPreds.forEach(a => { arimaByDate[a.fecha] = a; });
 
-      const tbody = document.getElementById('predTableBody');
+      const tbody = document.getElementById('predTableBody');  // null in v2 — OK
 
       /* v2: build rows and animate them in with stagger */
       const rows = preds.map((p, idx) => {
-        const gru    = gruByDate[p.fecha]   || null;
+        const lstm   = lstmByDate[p.fecha]  || null;
+        const attn   = attnByDate[p.fecha]  || null;
         const arima  = arimaByDate[p.fecha] || null;
-        const lstmUp  = p.variacion >= 0;
-        const gruUp   = gru   ? gru.variacion   >= 0 : null;
+        const gruUp  = p.variacion >= 0;
+        const lstmUp = lstm  ? lstm.variacion  >= 0 : null;
+        const attnUp = attn  ? attn.variacion  >= 0 : null;
         const arimaUp = arima ? arima.variacion >= 0 : null;
+
+        const priceCell = (data, up) => data ? `
+            <div class="pred-price">
+              <span class="dir-arrow ${up ? 'up' : 'down'}">${up ? '▲' : '▼'}</span>
+              ${data.prediccion.toLocaleString('es-ES')}
+            </div>
+            <div class="pred-pct ${up ? 'up' : 'down'}">
+              ${data.variacion_pct >= 0 ? '+' : ''}${data.variacion_pct}%
+            </div>` : '<span style="color:var(--t3)">—</span>';
 
         const tr = document.createElement('tr');
         tr.style.cssText = 'opacity:0;transform:translateX(-8px);transition:opacity 0.25s ease,transform 0.25s ease';
         tr.innerHTML = `
           <td class="pred-date">${p.fecha}</td>
-          <td class="pred-price-cell arima-col">
-            ${arima ? `
+          <td class="pred-price-cell" style="background:rgba(0,212,170,0.05)">
             <div class="pred-price">
-              <span class="dir-arrow ${arimaUp ? 'up' : 'down'}">${arimaUp ? '▲' : '▼'}</span>
-              ${arima.prediccion.toLocaleString('es-ES')}
-            </div>
-            <div class="pred-pct ${arimaUp ? 'up' : 'down'}">
-              ${arima.variacion_pct >= 0 ? '+' : ''}${arima.variacion_pct}%
-            </div>` : '<span style="color:var(--t3)">—</span>'}
-          </td>
-          <td class="pred-price-cell">
-            <div class="pred-price">
-              <span class="dir-arrow ${lstmUp ? 'up' : 'down'}">${lstmUp ? '▲' : '▼'}</span>
+              <span class="dir-arrow ${gruUp ? 'up' : 'down'}">${gruUp ? '▲' : '▼'}</span>
               ${p.prediccion.toLocaleString('es-ES')}
             </div>
-            <div class="pred-pct ${lstmUp ? 'up' : 'down'}">
+            <div class="pred-pct ${gruUp ? 'up' : 'down'}">
               ${p.variacion_pct >= 0 ? '+' : ''}${p.variacion_pct}%
             </div>
           </td>
-          <td class="pred-price-cell">
-            ${gru ? `
-            <div class="pred-price">
-              <span class="dir-arrow ${gruUp ? 'up' : 'down'}">${gruUp ? '▲' : '▼'}</span>
-              ${gru.prediccion.toLocaleString('es-ES')}
-            </div>
-            <div class="pred-pct ${gruUp ? 'up' : 'down'}">
-              ${gru.variacion_pct >= 0 ? '+' : ''}${gru.variacion_pct}%
-            </div>` : '<span style="color:var(--t3)">—</span>'}
-          </td>`;
+          <td class="pred-price-cell">${priceCell(lstm, lstmUp)}</td>
+          <td class="pred-price-cell">${priceCell(attn, attnUp)}</td>
+          <td class="pred-price-cell arima-col">${priceCell(arima, arimaUp)}</td>`;
         return { el: tr, delay: idx * 120 };
       });
 
-      tbody.innerHTML = '';
-      rows.forEach(({ el, delay }) => {
-        tbody.appendChild(el);
-        setTimeout(() => {
-          el.style.opacity    = '1';
-          el.style.transform  = 'none';
-        }, delay + 50);
-      });
+      if (tbody) {
+        tbody.innerHTML = '';
+        rows.forEach(({ el, delay }) => {
+          tbody.appendChild(el);
+          setTimeout(() => { el.style.opacity = '1'; el.style.transform = 'none'; }, delay + 50);
+        });
+      }
 
       if (historicalData) updatePredChart(historicalData, predData);
     } catch (e) {
-      document.getElementById('predTableBody').innerHTML =
-        `<tr><td colspan="4" style="color:var(--down);padding:.75rem;font-size:12px">Error loading predictions</td></tr>`;
+      const tb = document.getElementById('predTableBody');
+      if (tb) tb.innerHTML = `<tr><td colspan="5" style="color:var(--down);padding:.75rem;font-size:12px">Error loading predictions</td></tr>`;
+      console.error('loadPredictions error:', e);
     } finally {
-      btn.disabled = false;
-      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh`;
+      if (btn) { btn.disabled = false; btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh`; }
     }
   }
 
   /* Overlay chart */
   function updatePredChart(hist, pred) {
-    const ctx = document.getElementById('predChart').getContext('2d');
+    const canvas = document.getElementById('predChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
     if (predChart) predChart.destroy();
 
     const n          = 60;
@@ -1555,12 +1555,15 @@
     const joinDate   = [histDates.at(-1),  ...predDates];
     const joinPrices = [histPrices.at(-1), ...predPrices];
 
-    // Build ARIMA and GRU join series if available
+    // Build overlay series for comparison models
     const arimaJoin = window._latestArimaPreds
       ? [histPrices.at(-1), ...window._latestArimaPreds.map(a => a.prediccion)]
       : null;
-    const gruJoin = window._latestGruPreds
-      ? [histPrices.at(-1), ...window._latestGruPreds.map(g => g.prediccion)]
+    const lstmJoin = window._latestLstmPreds
+      ? [histPrices.at(-1), ...window._latestLstmPreds.map(l => l.prediccion)]
+      : null;
+    const attnJoin = window._latestAttnPreds
+      ? [histPrices.at(-1), ...window._latestAttnPreds.map(a => a.prediccion)]
       : null;
 
     const datasets = [
@@ -1591,23 +1594,39 @@
       });
     }
 
+    // GRU v4 — modelo principal
     datasets.push({
-      label: 'LSTM',
+      label: 'GRU v4 ★ (MAE=142)',
       data: joinDate.map((d, i) => ({ x: d, y: joinPrices[i] })),
-      borderColor: '#fb923c',
-      borderDash: [4, 3],
-      borderWidth: 1.5,
-      pointRadius: 3,
-      pointBackgroundColor: '#fb923c',
+      borderColor: '#00d4aa',
+      borderDash: [5, 3],
+      borderWidth: 2.5,
+      pointRadius: 4,
+      pointBackgroundColor: '#00d4aa',
       pointBorderColor: '#04060d',
       pointBorderWidth: 2,
       tension: 0.3,
     });
 
-    if (gruJoin) {
+    if (lstmJoin) {
       datasets.push({
-        label: 'GRU',
-        data: joinDate.map((d, i) => ({ x: d, y: gruJoin[i] })),
+        label: 'LSTM v4',
+        data: joinDate.map((d, i) => ({ x: d, y: lstmJoin[i] })),
+        borderColor: '#fb923c',
+        borderDash: [4, 3],
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointBackgroundColor: '#fb923c',
+        pointBorderColor: '#04060d',
+        pointBorderWidth: 2,
+        tension: 0.3,
+      });
+    }
+
+    if (attnJoin) {
+      datasets.push({
+        label: 'Attention v4',
+        data: joinDate.map((d, i) => ({ x: d, y: attnJoin[i] })),
         borderColor: '#8b5cf6',
         borderDash: [3, 3],
         borderWidth: 1.5,
@@ -1931,9 +1950,9 @@
       const d1 = preds[0];
       if (d1) {
         const fmt = v => v !== null ? (v >= lp ? '▲ ' : '▼ ') + v.toLocaleString('es-ES') : '—';
-        document.getElementById('hkpiArima').textContent = fmt(d1.arima);
-        document.getElementById('hkpiLstm').textContent  = fmt(d1.lstm);
-        document.getElementById('hkpiGru').textContent   = fmt(d1.gru);
+        document.getElementById('hkpiArima').textContent = fmt(d1.gru_v4);
+        document.getElementById('hkpiLstm').textContent  = fmt(d1.lstm_v4);
+        document.getElementById('hkpiGru').textContent   = fmt(d1.arima);
       }
 
       // Chart
@@ -1955,26 +1974,26 @@
             borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1,
           },
           {
-            label: 'ARIMA \u2605',
-            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].arima })),
+            label: 'GRU v4 \u2605',
+            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].gru_v4 })),
             borderColor: '#00d4aa', borderDash: [6, 3], borderWidth: 2.5,
             pointRadius: (c) => c.dataIndex === 0 ? 0 : 5,
             pointBackgroundColor: '#00d4aa', pointBorderColor: '#0a0a0f', pointBorderWidth: 2, tension: 0.3,
           },
         ];
-        if (preds[0].lstm !== null) {
+        if (preds[0].lstm_v4 !== null) {
           datasets2.push({
-            label: 'LSTM',
-            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].lstm })),
+            label: 'LSTM v4',
+            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].lstm_v4 })),
             borderColor: '#fb923c', borderDash: [4, 3], borderWidth: 1.5,
             pointRadius: (c) => c.dataIndex === 0 ? 0 : 3,
             pointBackgroundColor: '#fb923c', pointBorderColor: '#0a0a0f', pointBorderWidth: 2, tension: 0.3,
           });
         }
-        if (preds[0].gru !== null) {
+        if (preds[0].arima !== null) {
           datasets2.push({
-            label: 'GRU',
-            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].gru })),
+            label: 'ARIMA',
+            data: joinD.map((d, i) => ({ x: d, y: i === 0 ? hp : preds[i-1].arima })),
             borderColor: '#8b5cf6', borderDash: [3, 3], borderWidth: 1.5,
             pointRadius: (c) => c.dataIndex === 0 ? 0 : 3,
             pointBackgroundColor: '#8b5cf6', pointBorderColor: '#0a0a0f', pointBorderWidth: 2, tension: 0.3,
@@ -2008,24 +2027,25 @@
       // Table
       tbody.innerHTML = '';
       preds.forEach((p, idx) => {
-        const au = p.arima >= lp;
-        const lu = p.lstm  !== null && p.lstm  >= lp;
-        const gu = p.gru   !== null && p.gru   >= lp;
+        const gu = p.gru_v4  !== null && p.gru_v4  >= lp;
+        const lu = p.lstm_v4 !== null && p.lstm_v4 >= lp;
+        const au = p.arima   !== null && p.arima   >= lp;
+        const gVarPct = p.gru_var_pct;
         const tr = document.createElement('tr');
         tr.style.cssText = 'opacity:0;transform:translateX(-8px);transition:opacity .2s ease,transform .2s ease';
         tr.innerHTML = `
           <td class="pred-date">${p.fecha}</td>
+          <td class="pred-price-cell" style="background:rgba(0,212,170,0.05)">
+            ${p.gru_v4!==null?`<div class="pred-price"><span class="dir-arrow ${gu?'up':'down'}">${gu?'▲':'▼'}</span>${p.gru_v4.toLocaleString('es-ES')}</div>`:'<span style="color:var(--t3)">—</span>'}
+          </td>
+          <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${gVarPct>=0?'var(--up)':'var(--down)'}">
+            ${gVarPct!==null?(gVarPct>=0?'+':'')+gVarPct+'%':'—'}
+          </td>
+          <td class="pred-price-cell">
+            ${p.lstm_v4!==null?`<div class="pred-price"><span class="dir-arrow ${lu?'up':'down'}">${lu?'▲':'▼'}</span>${p.lstm_v4.toLocaleString('es-ES')}</div>`:'<span style="color:var(--t3)">—</span>'}
+          </td>
           <td class="pred-price-cell arima-col">
-            <div class="pred-price"><span class="dir-arrow ${au?'up':'down'}">${au?'▲':'▼'}</span>${p.arima.toLocaleString('es-ES')}</div>
-          </td>
-          <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${p.arima_var_pct>=0?'var(--up)':'var(--down)'}">
-            ${p.arima_var_pct>=0?'+':''}${p.arima_var_pct}%
-          </td>
-          <td class="pred-price-cell">
-            ${p.lstm!==null?`<div class="pred-price"><span class="dir-arrow ${lu?'up':'down'}">${lu?'▲':'▼'}</span>${p.lstm.toLocaleString('es-ES')}</div>`:'<span style="color:var(--t3)">—</span>'}
-          </td>
-          <td class="pred-price-cell">
-            ${p.gru!==null?`<div class="pred-price"><span class="dir-arrow ${gu?'up':'down'}">${gu?'▲':'▼'}</span>${p.gru.toLocaleString('es-ES')}</div>`:'<span style="color:var(--t3)">—</span>'}
+            ${p.arima!==null?`<div class="pred-price"><span class="dir-arrow ${au?'up':'down'}">${au?'▲':'▼'}</span>${p.arima.toLocaleString('es-ES')}</div>`:'<span style="color:var(--t3)">—</span>'}
           </td>`;
         tbody.appendChild(tr);
         setTimeout(() => { tr.style.opacity = '1'; tr.style.transform = 'none'; }, idx * 80 + 50);

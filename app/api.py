@@ -142,7 +142,8 @@ YF_BACKOFF        = 1800  # 30 min sin reintentar yfinance tras fallo
 _RAW_CSV = DATA_DIR / "raw" / "ibex35_raw.csv"
 try:
     _static_df = pd.read_csv(_RAW_CSV, index_col=0, parse_dates=True)
-    _static_df = _static_df[["Close", "Volume"]].dropna()
+    _available = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in _static_df.columns]
+    _static_df = _static_df[_available].dropna(subset=["Close"])
     _cache["df"]     = _static_df
     _cache["ts"]     = datetime.now()   # caché válida 1h desde ahora
     _cache["days"]   = 3650
@@ -184,7 +185,9 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
                                auto_adjust=True, progress=False)
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
-            df = data[["Close", "Volume"]].dropna()
+            # Mantener OHLCV completo — compute_features_v4 necesita High/Low para ATR
+            available = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in data.columns]
+            df = data[available].dropna(subset=["Close"])
             if len(df) > 0:
                 _cache["df"]     = df
                 _cache["ts"]     = now
