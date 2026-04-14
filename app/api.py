@@ -76,19 +76,35 @@ except Exception as e:
 try:
     from tensorflow import keras
     gru_v4_model = keras.models.load_model(MODELS_DIR / "direct_gru_v4_5d.keras")
-    print("Direct GRU v4 cargado (principal)")
+    print("Direct GRU v4 (5d) cargado (principal)")
 except Exception as e:
     gru_v4_model = None
-    print(f"Advertencia: No se pudo cargar GRU v4: {e}")
+    print(f"Advertencia: No se pudo cargar GRU v4 5d: {e}")
+
+try:
+    from tensorflow import keras as _keras_g10
+    gru_v4_10d_model = _keras_g10.models.load_model(MODELS_DIR / "direct_gru_v4_10d.keras")
+    print("Direct GRU v4 (10d) cargado")
+except Exception as e:
+    gru_v4_10d_model = None
+    print(f"Advertencia: No se pudo cargar GRU v4 10d: {e}")
 
 # ── Direct LSTM v4 ────────────────────────────────────────────────────────
 try:
     from tensorflow import keras as _keras
     lstm_v4_model = _keras.models.load_model(MODELS_DIR / "direct_lstm_v4_5d.keras")
-    print("Direct LSTM v4 cargado")
+    print("Direct LSTM v4 (5d) cargado")
 except Exception as e:
     lstm_v4_model = None
-    print(f"Advertencia: No se pudo cargar LSTM v4: {e}")
+    print(f"Advertencia: No se pudo cargar LSTM v4 5d: {e}")
+
+try:
+    from tensorflow import keras as _keras_l10
+    lstm_v4_10d_model = _keras_l10.models.load_model(MODELS_DIR / "direct_lstm_v4_10d.keras")
+    print("Direct LSTM v4 (10d) cargado")
+except Exception as e:
+    lstm_v4_10d_model = None
+    print(f"Advertencia: No se pudo cargar LSTM v4 10d: {e}")
 
 # ── LSTM + Attention v4 ───────────────────────────────────────────────────
 try:
@@ -254,6 +270,7 @@ def _fmt_predictions(predictions: list, last_price: float,
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
 @app.get("/")
+@app.get("/v2")
 def index():
     return FileResponse(str(STATIC_DIR / "index_v2.html"))
 
@@ -510,10 +527,10 @@ def get_regression():
 @app.get("/predict/horizon")
 def predict_horizon(days: int = 5):
     """
-    Prediccion a N dias habiles (1-5): GRU v4 + LSTM v4 + Attention + ARIMA.
+    Prediccion a N dias habiles (1-10): GRU v4 + LSTM v4 + Attention + ARIMA.
     GRU v4 es el modelo principal (MAE=142). ARIMA es baseline estadistico.
     """
-    days = max(1, min(days, 5))
+    days = max(1, min(days, 10))
     try:
         import warnings
         from statsmodels.tsa.arima.model import ARIMA as ARIMAModel
@@ -538,21 +555,21 @@ def predict_horizon(days: int = 5):
         last_60_scaled = scaler_v4.transform(features_v4.values[-SEQUENCE_LENGTH:]) \
                          if scaler_v4 and len(features_v4) >= SEQUENCE_LENGTH else None
 
-        # ── GRU v4 — principal ────────────────────────────────
+        # ── GRU v4 — usa modelo 10d si days > 5 ──────────────
         gru_preds = None
-        if gru_v4_model and last_60_scaled is not None:
+        _gru_m = (gru_v4_10d_model if days > 5 and gru_v4_10d_model else gru_v4_model)
+        if _gru_m and last_60_scaled is not None:
             from src.direct_model import predict_direct_v4
-            gru_preds = [round(v, 2) for v in
-                         predict_direct_v4(gru_v4_model, last_60_scaled,
-                                           scaler_v4, last_price)[:days]]
+            all_gru = predict_direct_v4(_gru_m, last_60_scaled, scaler_v4, last_price)
+            gru_preds = [round(v, 2) for v in all_gru[:days]]
 
-        # ── LSTM v4 ───────────────────────────────────────────
+        # ── LSTM v4 — usa modelo 10d si days > 5 ────────────
         lstm_preds = None
-        if lstm_v4_model and last_60_scaled is not None:
+        _lstm_m = (lstm_v4_10d_model if days > 5 and lstm_v4_10d_model else lstm_v4_model)
+        if _lstm_m and last_60_scaled is not None:
             from src.direct_model import predict_direct_v4 as _pdv4
-            lstm_preds = [round(v, 2) for v in
-                          _pdv4(lstm_v4_model, last_60_scaled,
-                                scaler_v4, last_price)[:days]]
+            all_lstm = _pdv4(_lstm_m, last_60_scaled, scaler_v4, last_price)
+            lstm_preds = [round(v, 2) for v in all_lstm[:days]]
 
         # ── Attention v4 ──────────────────────────────────────
         attn_preds = None
@@ -563,10 +580,10 @@ def predict_horizon(days: int = 5):
 
         result = []
         for i, fecha in enumerate(future_dates):
-            ap = arima_preds[i]
-            gp = gru_preds[i]  if gru_preds  else None
-            lp = lstm_preds[i] if lstm_preds else None
-            ap2 = attn_preds[i] if attn_preds else None
+            ap  = arima_preds[i] if arima_preds and i < len(arima_preds) else None
+            gp  = gru_preds[i]   if gru_preds   and i < len(gru_preds)   else None
+            lp  = lstm_preds[i]  if lstm_preds   and i < len(lstm_preds)  else None
+            ap2 = attn_preds[i]  if attn_preds   and i < len(attn_preds)  else None
             result.append({
                 "fecha":          fecha,
                 "gru_v4":         gp,
@@ -576,7 +593,7 @@ def predict_horizon(days: int = 5):
                 "gru_var_pct":    round((gp  - last_price) / last_price * 100, 2) if gp  else None,
                 "lstm_var_pct":   round((lp  - last_price) / last_price * 100, 2) if lp  else None,
                 "attn_var_pct":   round((ap2 - last_price) / last_price * 100, 2) if ap2 else None,
-                "arima_var_pct":  round((ap  - last_price) / last_price * 100, 2),
+                "arima_var_pct":  round((ap  - last_price) / last_price * 100, 2) if ap else None,
             })
 
         return {

@@ -891,34 +891,6 @@
         </div>
       </div>
 
-      <div class="model-card arima">
-        <div class="model-card-header">
-          <span class="model-card-name">ARIMA</span>
-          <span class="model-badge-best">BEST OVERALL</span>
-        </div>
-        <div class="model-metrics" id="arimaMeta">
-          <div class="model-metric-item">
-            <span class="model-metric-label">MAE</span>
-            <span class="model-metric-value" id="arimaMAE">—</span>
-            <div class="metric-bar"><div class="metric-bar-fill" id="arimaMAEBar"></div></div>
-          </div>
-          <div class="model-metric-item">
-            <span class="model-metric-label">RMSE</span>
-            <span class="model-metric-value" id="arimaRMSE">—</span>
-            <div class="metric-bar"><div class="metric-bar-fill" id="arimaRMSEBar"></div></div>
-          </div>
-        </div>
-        <div class="stat-row">
-          <div class="stat-badge">
-            <span class="stat-badge-label">R²</span>
-            <span class="stat-badge-val" id="arimaR2">—</span>
-          </div>
-          <div class="stat-badge">
-            <span class="stat-badge-label">DW</span>
-            <span class="stat-badge-val" id="arimaDW">—</span>
-          </div>
-        </div>
-      </div>
 
     </div>
   </aside>
@@ -952,37 +924,38 @@
       <div class="card-body">
         <div class="backtest-kpi-strip" style="margin-bottom:14px">
           <div class="bkpi-item"><span class="bkpi-label">Entrenado hasta</span><span class="bkpi-val" style="color:var(--t1)">30-Mar-2026</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">MAE ARIMA (9d)</span><span class="bkpi-val" style="color:var(--down)">749 pts</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">MAE GRU v4 (5d)</span><span class="bkpi-val" style="color:var(--down)">571 pts</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">Dir. Acc. GRU v4</span><span class="bkpi-val" style="color:var(--up)">5/5 (100%)</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE GRU v4 (8d)</span><span class="bkpi-val" style="color:var(--down)">775 pts</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Dir. GRU v4</span><span class="bkpi-val" style="color:var(--up)">8/8 (100%)</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE LSTM v4 (8d)</span><span class="bkpi-val" style="color:var(--down)">837 pts</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Dir. LSTM v4</span><span class="bkpi-val" style="color:var(--down)">1/8 (13%)</span></div>
           <div class="bkpi-item"><span class="bkpi-label">Contexto</span><span class="bkpi-val" style="color:var(--t2);font-size:10px">IBEX +7.8% en 11 dias</span></div>
         </div>
         <table class="pred-table">
           <thead>
             <tr>
               <th>Fecha</th>
-              <th style="text-align:right;color:var(--green)">GRU v4</th>
-              <th style="text-align:right">ARIMA</th>
+              <th style="text-align:right;color:var(--green)">GRU v4 ★</th>
+              <th style="text-align:right;color:var(--purple)">LSTM v4</th>
               <th style="text-align:right">Real</th>
               <th style="text-align:right">Err GRU</th>
               <th style="text-align:center">Dir.</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td class="pred-date">31-Mar-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,985.88</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,981.56</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,049.60</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+64</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">01-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,983.26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,973.92</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,580.40</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+597</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">02-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,980.51</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,972.66</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,555.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+575</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">31-Mar-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,975.60</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,995.36</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,049.60</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+74</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">01-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,989.79</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,961.45</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,580.40</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+591</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">02-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,988.18</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,935.70</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,555.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+568</td><td style="text-align:center;color:var(--up)">✓</td></tr>
             <tr style="opacity:0.45"><td class="pred-date" colspan="6" style="text-align:center;font-size:11px;color:var(--down)">— Semana Santa: Vie. Santo 3-Abr + Lun. Pascua 6-Abr — mercado cerrado —</td></tr>
-            <tr><td class="pred-date">07-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,973.38</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,977.65</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,444.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+471</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">08-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,983.64</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,974.16</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,132.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,149</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">09-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,973.69</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,104.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">10-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">16,973.81</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,204.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--up)">✓</td></tr>
-            <tr><td class="pred-date">13-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,023.80</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--down)">↓</td></tr>
+            <tr><td class="pred-date">07-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,993.42</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,883.62</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">17,444.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+451</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">08-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,987.14</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,889.59</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,132.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,145</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">09-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,988.52</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,904.05</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,104.90</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,116</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">10-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,985.37</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,909.67</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,204.30</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,219</td><td style="text-align:center;color:var(--up)">✓</td></tr>
+            <tr><td class="pred-date">13-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">16,984.46</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--purple)">16,923.30</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,023.80</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--up)">+1,039</td><td style="text-align:center;color:var(--up)">✓</td></tr>
             <tr><td class="pred-date">14-Abr-26</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t3)">—</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--t1)">18,286.10</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--t3)">—</td><td style="text-align:center;color:var(--up)">↑</td></tr>
           </tbody>
         </table>
         <div class="horizon-disclaimer" style="margin-top:10px">
-          MAE elevado por evento extremo post-aranceles Trump (+7.8% en 11 dias). Ambos modelos predicen tendencia correcta (100% dir. acc.) pero subestiman la magnitud del shock. GRU v4 solo predice 5 dias lectivos desde el cutoff; datos reales completos hasta 14-Abr.
+          MAE elevado por evento extremo post-aranceles Trump (+7.8% en 11 dias). GRU v4 predice direccion correcta en 8/8 dias (100% dir. acc.) pero subestima la magnitud del shock. LSTM v4 predijo tendencia bajista (predicciones por debajo del ancla) cuando el mercado reboto con fuerza — 1/8 dir. acc. Modelo 10d: slot 10 no disponible para 14-Abr (2 slots de Semana Santa consumidos).
         </div>
       </div>
     </div>
@@ -996,8 +969,6 @@
           <button class="horizon-btn" data-days="2" onclick="loadHorizon(2)">2D</button>
           <button class="horizon-btn" data-days="3" onclick="loadHorizon(3)">3D</button>
           <button class="horizon-btn active" data-days="5" onclick="loadHorizon(5)">5D</button>
-          <button class="horizon-btn" data-days="7" onclick="loadHorizon(7)">7D</button>
-          <button class="horizon-btn" data-days="10" onclick="loadHorizon(10)">10D</button>
         </div>
       </div>
       <div class="card-body">
@@ -1060,59 +1031,25 @@
       </div>
     </div>
 
-    <!-- ── Backtest ────────────────────────────────────────── -->
+    <!-- ── Backtest Cutoff Mar-30 ──────────────────────────── -->
     <div class="card" id="backtestSection">
       <div class="card-header">
-        <span class="card-title">Backtest Historico 1993–2026 — ARIMA vs LSTM vs GRU</span>
-        <div class="days-selector">
-          <button class="days-btn active" onclick="loadBacktest(365)">1Y</button>
-          <button class="days-btn" onclick="loadBacktest(1825)">5Y</button>
-          <button class="days-btn" onclick="loadBacktest(99999)">Full</button>
-        </div>
+        <span class="card-title">Validacion Out-of-Sample — Cutoff 30-Mar-2026 (8 dias lectivos)</span>
       </div>
       <div class="card-body">
-        <div class="chart-wrap" style="height:280px">
+        <div style="max-width:560px;margin:0 auto;height:280px;position:relative">
           <canvas id="backtestChart"></canvas>
         </div>
-        <div class="backtest-kpi-strip" id="backtestKPI">
-          <div class="bkpi-item"><span class="bkpi-label">Days OOS</span><span class="bkpi-val" id="bkpiDays">—</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">MAE ARIMA</span><span class="bkpi-val" id="bkpiMAE">—</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">R²</span><span class="bkpi-val" id="bkpiR2">—</span></div>
-          <div class="bkpi-item"><span class="bkpi-label">Durbin-Watson</span><span class="bkpi-val" id="bkpiDW">—</span></div>
+        <div class="backtest-kpi-strip" style="margin-top:10px">
+          <div class="bkpi-item"><span class="bkpi-label">Anchor (30-Mar)</span><span class="bkpi-val" style="color:var(--t1)">16.969,20</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE GRU v4 (8d)</span><span class="bkpi-val" style="color:var(--down)">775 pts</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Dir. GRU v4</span><span class="bkpi-val" style="color:var(--up)">8/8 (100%)</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">MAE LSTM v4 (8d)</span><span class="bkpi-val" style="color:var(--down)">837 pts</span></div>
+          <div class="bkpi-item"><span class="bkpi-label">Dir. LSTM v4</span><span class="bkpi-val" style="color:var(--down)">1/8 (13%)</span></div>
         </div>
       </div>
     </div>
 
-    <div class="card" id="accuracySection">
-      <div class="card-header">
-        <span class="card-title">Historial de Predicciones — Aciertos vs Fallos</span>
-      </div>
-      <div class="card-body">
-        <div class="acc-hero">
-          <div class="acc-big" id="accBigNumber">—</div>
-          <div class="acc-label">Direction Accuracy</div>
-        </div>
-        <table class="acc-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Base</th>
-              <th>Prediction</th>
-              <th>Actual</th>
-              <th>Error</th>
-              <th>Result</th>
-            </tr>
-          </thead>
-          <tbody id="accuracyTableBody">
-            <tr>
-              <td colspan="6" style="color:var(--t3);padding:20px 10px;font-size:12px">
-                Loading prediction history...
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
 
     <footer style="background:transparent;border:none;padding:0">
       <div class="footer-disclaimer">
@@ -1797,91 +1734,131 @@
     } catch (e) { console.error('Error accuracy:', e); }
   }
 
-  /* ── Backtest ───────────────────────────────────────────── */
+  /* ── Backtest Cutoff Mar-30 (datos hardcoded) ──────────── */
   let backtestChart = null;
-  let _backtestDays = 365;
 
-  async function loadBacktest(days) {
-    if (days !== undefined) _backtestDays = days;
-    // Update active button
-    document.querySelectorAll('#backtestSection .days-btn').forEach(b => {
-      b.classList.remove('active');
-      if ((days === 365 && b.textContent === '1Y') ||
-          (days === 1825 && b.textContent === '5Y') ||
-          (days >= 9999 && b.textContent === 'Full')) b.classList.add('active');
-    });
-    try {
-      const res  = await fetch(`${API}/backtest?days=${_backtestDays}`);
-      const data = await res.json();
-      const ctx  = document.getElementById('backtestChart').getContext('2d');
-      if (backtestChart) backtestChart.destroy();
+  function loadBacktest() {
+    // Datos out-of-sample: cutoff 30-Mar-2026, modelo entrenado hasta ese dia
+    // GRU v4 10d y LSTM v4 10d predicen desde el anchor 16969.20
+    // Fechas reales de cotizacion (saltando Semana Santa 3-Abr y 6-Abr)
+    const labels   = ['30M','31M','1A','2A','7A','8A','9A','10A','13A'];
+    const real     = [16969.20, 17049.60, 17580.40, 17555.90, 17444.30, 18132.30, 18104.90, 18204.30, 18023.80];
+    const gru      = [16969.20, 16975.60, 16989.79, 16988.18, 16993.42, 16987.14, 16988.52, 16985.37, 16984.46];
+    const lstm     = [16969.20, 16995.36, 16961.45, 16935.70, 16883.62, 16889.59, 16904.05, 16909.67, 16923.30];
+    // errores: real - predicho (positivo = real subio mas que la prediccion)
+    const gruErr   = real.map((r, i) => i === 0 ? null : Math.round(r - gru[i]));
+    const lstmErr  = real.map((r, i) => i === 0 ? null : Math.round(r - lstm[i]));
 
-      backtestChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          datasets: [
-            {
-              label: 'Real',
-              data: data.dates.map((d, i) => ({ x: d, y: data.real[i] })),
-              borderColor: '#f1f5f9',
-              borderWidth: 1.2,
-              pointRadius: 0,
-              tension: 0.1,
-            },
-            {
-              label: 'ARIMA',
-              data: data.dates.map((d, i) => ({ x: d, y: data.arima[i] })),
-              borderColor: '#00d4aa',
-              borderDash: [5, 3],
-              borderWidth: 1.5,
-              pointRadius: 0,
-              tension: 0.1,
-            },
-            {
-              label: 'LSTM',
-              data: data.dates.map((d, i) => ({ x: d, y: data.lstm[i] })),
-              borderColor: '#fb923c',
-              borderDash: [3, 3],
-              borderWidth: 1,
-              pointRadius: 0,
-              tension: 0.1,
-            },
-            {
-              label: 'GRU',
-              data: data.dates.map((d, i) => ({ x: d, y: data.gru[i] })),
-              borderColor: '#8b5cf6',
-              borderDash: [3, 3],
-              borderWidth: 1,
-              pointRadius: 0,
-              tension: 0.1,
-            },
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          animation: { duration: 400 },
-          plugins: {
-            legend: { labels: { color: '#94a3b8', boxWidth: 18,
-              font: { family: "'Inter', sans-serif", size: 10 } } },
-            tooltip: {
-              backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)',
-              borderWidth: 1, titleColor: '#475569', bodyColor: '#f1f5f9', padding: 10,
+    // Plugin personalizado: dibuja flecha + error junto a cada punto
+    const errorPlugin = {
+      id: 'errAnnot',
+      afterDatasetsDraw(chart) {
+        const ctx2 = chart.ctx;
+        ctx2.save();
+        ctx2.textAlign = 'center';
+        ctx2.textBaseline = 'middle';
+
+        const gruData  = [16969.20,16975.60,16989.79,16988.18,16993.42,16987.14,16988.52,16985.37,16984.46];
+        const lstmData = [16969.20,16995.36,16961.45,16935.70,16883.62,16889.59,16904.05,16909.67,16923.30];
+
+        [
+          { meta: chart.getDatasetMeta(0), errors: gruErr,  preds: gruData,  color: '#00d4aa', offset: -18 },
+          { meta: chart.getDatasetMeta(1), errors: lstmErr, preds: lstmData, color: '#8b5cf6', offset: +18 },
+        ].forEach(({ meta, errors, preds, color, offset }) => {
+          errors.forEach((err, i) => {
+            if (err === null) return;
+            const pt = meta.data[i];
+            if (!pt) return;
+            const x = pt.x;
+            const y = pt.y + offset;
+            // flecha = direccion del predicho respecto al dia anterior
+            const arrow = preds[i] >= preds[i - 1] ? '↑' : '↓';
+            const label = `${arrow} ${Math.abs(err) >= 1000
+              ? (Math.abs(err)/1000).toFixed(1)+'k'
+              : Math.abs(err)}`;
+            // fondo semitransparente
+            ctx2.font = 'bold 8.5px Inter, sans-serif';
+            const w = ctx2.measureText(label).width + 6;
+            ctx2.fillStyle = 'rgba(10,10,15,0.75)';
+            ctx2.fillRect(x - w/2, y - 7, w, 14);
+            // texto
+            ctx2.fillStyle = color;
+            ctx2.fillText(label, x, y);
+          });
+        });
+        ctx2.restore();
+      }
+    };
+
+    const ctx = document.getElementById('backtestChart').getContext('2d');
+    if (backtestChart) backtestChart.destroy();
+
+    backtestChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'GRU v4 \u2605',
+            data: gru,
+            borderColor: '#00d4aa',
+            borderWidth: 2.5,
+            pointRadius: (c) => c.dataIndex === 0 ? 0 : 5,
+            pointBackgroundColor: '#00d4aa',
+            pointBorderColor: '#0a0a0f',
+            pointBorderWidth: 2,
+            tension: 0.3,
+            fill: false,
+          },
+          {
+            label: 'LSTM v4',
+            data: lstm,
+            borderColor: '#8b5cf6',
+            borderDash: [5, 3],
+            borderWidth: 2,
+            pointRadius: (c) => c.dataIndex === 0 ? 0 : 5,
+            pointBackgroundColor: '#8b5cf6',
+            pointBorderColor: '#0a0a0f',
+            pointBorderWidth: 2,
+            tension: 0.3,
+            fill: false,
+          },
+        ]
+      },
+      plugins: [errorPlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 400 },
+        layout: { padding: { top: 28, bottom: 10 } },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', boxWidth: 16, font: { family: "'Inter', sans-serif", size: 11 } } },
+          tooltip: {
+            backgroundColor: '#111118', borderColor: 'rgba(255,255,255,0.08)',
+            borderWidth: 1, titleColor: '#475569', bodyColor: '#f1f5f9', padding: 10,
+            callbacks: {
+              afterLabel: (c) => {
+                const err = c.datasetIndex === 0 ? gruErr[c.dataIndex] : lstmErr[c.dataIndex];
+                if (err === null) return '';
+                return ` Real: ${real[c.dataIndex].toLocaleString('es-ES')}  (diff: ${err > 0 ? '+' : ''}${err})`;
+              }
             }
           },
-          scales: {
-            x: { type: 'time', time: { unit: _backtestDays <= 365 ? 'month' : 'year' },
-                 grid: { display: false }, ticks: { color: '#475569', maxTicksLimit: 8 } },
-            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#475569' } },
-          }
+        },
+        scales: {
+          x: {
+            type: 'category',
+            grid: { display: false },
+            ticks: { color: '#475569', font: { size: 9 } },
+          },
+          y: {
+            min: 16820,
+            max: 17080,
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#475569', callback: v => v.toLocaleString('es-ES'), maxTicksLimit: 5 },
+          },
         }
-      });
-
-      // Compute MAE for ARIMA OOS in JS
-      const pairs = data.real.map((r, i) => [r, data.arima[i]]).filter(([r, a]) => r != null && a != null);
-      const mae   = pairs.reduce((acc, [r, a]) => acc + Math.abs(r - a), 0) / pairs.length;
-      document.getElementById('bkpiDays').textContent = pairs.length.toLocaleString('es-ES');
-      document.getElementById('bkpiMAE').textContent  = mae.toFixed(1) + ' pts';
-    } catch (e) { console.error('Backtest error:', e); }
+      }
+    });
   }
 
   /* ── Validation ─────────────────────────────────────────── */
@@ -2066,7 +2043,7 @@
   loadPredictions();
   loadMetrics();
   loadAccuracy();
-  loadBacktest(365);
+  loadBacktest();
   loadValidation();
   loadRegression();
   loadHorizon(5);

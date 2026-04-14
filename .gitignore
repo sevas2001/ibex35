@@ -31,3 +31,22 @@ Thumbs.db
 # models/scaler.pkl        <- incluido
 # data/metrics_comparison.csv  <- incluido
 # data/predictions_5days.csv   <- incluido
+
+# IDE / tools
+.claude/
+node_modules/
+package*.json
+
+# Big preprocessed data
+data/preprocessed_data_v2.npz
+data/preprocessed_data_v3.npz
+data/preprocessed_data_v4.npz
+
+# Misc scripts
+compare_april14.py
+create_presentation*.py
+create_presentation*.js
+generate_cover.py
+ensemble.py
+train_dgru_v4_10d.py
+*.md
