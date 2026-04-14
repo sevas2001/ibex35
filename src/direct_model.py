@@ -198,7 +198,7 @@ def predict_direct(model, last_60_scaled: np.ndarray, scaler) -> list:
     """
     nf = scaler.n_features_in_
     X  = last_60_scaled.reshape(1, 60, last_60_scaled.shape[1])
-    preds_scaled = model.predict(X, verbose=0)[0]   # (n_steps,)
+    preds_scaled = model(X, training=False).numpy()[0]   # (n_steps,) — evita TF retrace
 
     dummy = np.zeros((len(preds_scaled), nf))
     dummy[:, 0] = preds_scaled
@@ -328,7 +328,7 @@ def predict_direct_v4(model,
     Retorna lista de n_steps precios predichos.
     """
     X            = last_60_scaled.reshape(1, 60, last_60_scaled.shape[1])
-    preds_scaled = model.predict(X, verbose=0)[0]   # (n_steps,)
+    preds_scaled = model(X, training=False).numpy()[0]   # (n_steps,) — evita TF retrace
     return reconstruct_prices_from_returns(preds_scaled, anchor_price, scaler).tolist()
 
 

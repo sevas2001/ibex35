@@ -133,7 +133,7 @@ def predict_attention(model,
     from src.direct_model import reconstruct_prices_from_returns
 
     X            = last_60_scaled.reshape(1, 60, last_60_scaled.shape[1])
-    preds_scaled = model.predict(X, verbose=0)[0]   # (n_steps,)
+    preds_scaled = model(X, training=False).numpy()[0]   # (n_steps,) — evita TF retrace
     return reconstruct_prices_from_returns(preds_scaled, anchor_price, scaler).tolist()
 
 
