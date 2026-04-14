@@ -25,7 +25,6 @@ DATA_DIR   = BASE_DIR / "data"
 STATIC_DIR = Path(__file__).parent / "static"
 
 SEQUENCE_LENGTH = 60
-N_FEATURES      = 1   # Close (univariado)
 
 # ── Startup: cargar modelos ────────────────────────────────────────────────
 def _is_lfs_pointer(path: Path) -> bool:
@@ -49,36 +48,61 @@ def _try_resolve_lfs(path: Path):
     except Exception as e:
         print(f"No se pudo resolver LFS para {path.name}: {e}")
 
-print("Cargando modelos...")
+print("Cargando modelos v4 (Direct MIMO, log_return target)...")
 
-for _model_path in [MODELS_DIR / "lstm_model.keras", MODELS_DIR / "gru_model.keras",
-                    MODELS_DIR / "scaler.pkl"]:
-    if _is_lfs_pointer(_model_path):
-        print(f"[LFS] {_model_path.name} es puntero — resolviendo...")
-        _try_resolve_lfs(_model_path)
+# ── Resolver LFS para todos los modelos v4 ────────────────────────────────
+_v4_paths = [
+    MODELS_DIR / "direct_gru_v4_5d.keras",
+    MODELS_DIR / "direct_lstm_v4_5d.keras",
+    MODELS_DIR / "attention_lstm_5d.keras",
+    MODELS_DIR / "scaler_v4.pkl",
+]
+for _p in _v4_paths:
+    if _p.exists() and _is_lfs_pointer(_p):
+        print(f"[LFS] {_p.name} es puntero — resolviendo...")
+        _try_resolve_lfs(_p)
 
+# ── Scaler v4 (8 features, log_return como col 0) ─────────────────────────
+try:
+    scaler_v4  = joblib.load(MODELS_DIR / "scaler_v4.pkl")
+    N_FEATURES = scaler_v4.n_features_in_
+    print(f"Scaler v4 cargado ({N_FEATURES} features)")
+except Exception as e:
+    scaler_v4  = None
+    N_FEATURES = 8
+    print(f"Advertencia: No se pudo cargar scaler_v4: {e}")
+
+# ── Direct GRU v4 — modelo principal (MAE=142) ────────────────────────────
 try:
     from tensorflow import keras
-    lstm_model = keras.models.load_model(MODELS_DIR / "lstm_model.keras")
-    print("LSTM cargado.")
+    gru_v4_model = keras.models.load_model(MODELS_DIR / "direct_gru_v4_5d.keras")
+    print("Direct GRU v4 cargado (principal)")
 except Exception as e:
-    lstm_model = None
-    print(f"Advertencia: No se pudo cargar LSTM: {e}")
+    gru_v4_model = None
+    print(f"Advertencia: No se pudo cargar GRU v4: {e}")
 
+# ── Direct LSTM v4 ────────────────────────────────────────────────────────
 try:
     from tensorflow import keras as _keras
-    gru_model = _keras.models.load_model(MODELS_DIR / "gru_model.keras")
-    print("GRU cargado.")
+    lstm_v4_model = _keras.models.load_model(MODELS_DIR / "direct_lstm_v4_5d.keras")
+    print("Direct LSTM v4 cargado")
 except Exception as e:
-    gru_model = None
-    print(f"Advertencia: No se pudo cargar GRU: {e}")
+    lstm_v4_model = None
+    print(f"Advertencia: No se pudo cargar LSTM v4: {e}")
 
+# ── LSTM + Attention v4 ───────────────────────────────────────────────────
 try:
-    scaler = joblib.load(MODELS_DIR / "scaler.pkl")
-    print("Scaler cargado.")
+    from tensorflow import keras as _keras2
+    attention_model = _keras2.models.load_model(MODELS_DIR / "attention_lstm_5d.keras")
+    print("LSTM + Attention v4 cargado")
 except Exception as e:
-    scaler = None
-    print(f"Advertencia: No se pudo cargar scaler: {e}")
+    attention_model = None
+    print(f"Advertencia: No se pudo cargar Attention: {e}")
+
+# Alias para compatibilidad con codigo legado que use lstm_model / gru_model / scaler
+lstm_model = lstm_v4_model
+gru_model  = gru_v4_model
+scaler     = scaler_v4
 
 try:
     metrics_df   = pd.read_csv(DATA_DIR / "metrics_comparison.csv")
@@ -184,39 +208,45 @@ def fetch_recent_ibex(days: int = 90) -> pd.DataFrame:
     )
 
 
-def _compute_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Retorna DataFrame con solo Close (modelo univariado)."""
-    return df[["Close"]].dropna()
+def _compute_features_v4(df: pd.DataFrame) -> pd.DataFrame:
+    """Calcula 8 features v4 (log_return target). Requiere OHLCV."""
+    from src.preprocessor import compute_features_v4
+    return compute_features_v4(df)
 
 
-def _inv_close(scaled_arr: np.ndarray) -> np.ndarray:
-    """Inverse-transform valores de Close usando el scaler de 4 features."""
-    dummy = np.zeros((len(scaled_arr), N_FEATURES))
-    dummy[:, 0] = scaled_arr
-    return scaler.inverse_transform(dummy)[:, 0]
+def _predict_v4(model, df: pd.DataFrame, n_steps: int = 5) -> list:
+    """
+    Prediccion MIMO v4: un solo forward pass, reconstruye precios via exp().
+    Requiere scaler_v4 y columnas OHLCV en df.
+    """
+    if model is None or scaler_v4 is None:
+        raise HTTPException(status_code=503, detail="Modelo v4 no disponible")
 
+    from src.direct_model import predict_direct_v4
 
-def predict_5days(df: pd.DataFrame) -> list:
-    """Prediccion autoregresiva a 5 dias con el modelo LSTM multivariate."""
-    if lstm_model is None or scaler is None:
-        raise HTTPException(status_code=503, detail="Modelo no disponible")
-
-    features = _compute_features(df)
+    features = _compute_features_v4(df)
     if len(features) < SEQUENCE_LENGTH:
         raise HTTPException(status_code=400, detail="Datos insuficientes")
 
-    last_60  = features.values[-SEQUENCE_LENGTH:]          # (60, 3)
-    scaled   = scaler.transform(last_60)                   # (60, 3)
-    input_seq = scaled.tolist()
+    anchor        = float(df["Close"].dropna().iloc[-1])
+    last_60_scaled = scaler_v4.transform(features.values[-SEQUENCE_LENGTH:])
+    return predict_direct_v4(model, last_60_scaled, scaler_v4, anchor)
 
-    preds_scaled = []
-    for _ in range(5):
-        X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
-        p = float(lstm_model.predict(X, verbose=0)[0, 0])
-        preds_scaled.append(p)
-        input_seq.append([p])
 
-    return _inv_close(np.array(preds_scaled)).tolist()
+def _fmt_predictions(predictions: list, last_price: float,
+                      last_date, n_steps: int = 5) -> list:
+    """Formatea lista de precios en la estructura estandar de respuesta."""
+    future_dates = pd.bdate_range(start=last_date, periods=n_steps + 1)[1:]
+    result = []
+    for date, price in zip(future_dates, predictions):
+        diff = price - last_price
+        result.append({
+            "fecha":         date.strftime("%Y-%m-%d"),
+            "prediccion":    round(price, 2),
+            "variacion":     round(diff, 2),
+            "variacion_pct": round(diff / last_price * 100, 2),
+        })
+    return result
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
@@ -233,36 +263,30 @@ def index_v1():
 @app.get("/health")
 def health():
     return {
-        "status":        "ok",
-        "lstm_loaded":   lstm_model is not None,
-        "gru_loaded":    gru_model is not None,
-        "scaler_loaded": scaler is not None,
-        "n_features":    N_FEATURES,
-        "data_source":   _cache.get("source", "none"),
-        "cache_date":    _cache["df"].index[-1].strftime("%Y-%m-%d") if _cache["df"] is not None else None,
-        "timestamp":     datetime.now().isoformat(),
+        "status":            "ok",
+        "gru_v4_loaded":     gru_v4_model is not None,
+        "lstm_v4_loaded":    lstm_v4_model is not None,
+        "attention_loaded":  attention_model is not None,
+        "scaler_v4_loaded":  scaler_v4 is not None,
+        "n_features":        N_FEATURES,
+        "pipeline":          "v4 (Direct MIMO, log_return target)",
+        "best_model":        "Direct GRU v4 (MAE=141.79)",
+        "data_source":       _cache.get("source", "none"),
+        "cache_date":        _cache["df"].index[-1].strftime("%Y-%m-%d") if _cache["df"] is not None else None,
+        "timestamp":         datetime.now().isoformat(),
     }
 
 
 @app.get("/predict/5days")
 def predict_next_5_days():
-    """Genera prediccion a 5 dias habiles usando datos en tiempo real."""
+    """Prediccion principal a 5 dias — Direct GRU v4 (MIMO, log_return, MAE=142)."""
     try:
-        df = fetch_recent_ibex(days=120)
+        df         = fetch_recent_ibex(days=120)
         last_price = float(df["Close"].iloc[-1])
         last_date  = df.index[-1]
-        future_dates = pd.bdate_range(start=last_date, periods=6)[1:]
-        predictions  = predict_5days(df)
 
-        result = []
-        for date, price in zip(future_dates, predictions):
-            diff = price - last_price
-            result.append({
-                "fecha":         date.strftime("%Y-%m-%d"),
-                "prediccion":    round(price, 2),
-                "variacion":     round(diff, 2),
-                "variacion_pct": round(diff / last_price * 100, 2),
-            })
+        predictions = _predict_v4(gru_v4_model, df, n_steps=5)
+        result      = _fmt_predictions(predictions, last_price, last_date)
 
         if _logger_available and result:
             try:
@@ -275,6 +299,7 @@ def predict_next_5_days():
                 pass
 
         return {
+            "modelo":        "Direct GRU v4 (MIMO)",
             "ultimo_precio": round(last_price, 2),
             "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
             "predicciones":  result,
@@ -305,48 +330,74 @@ def get_historical(days: int = 365):
 
 
 @app.get("/predict/gru")
-def predict_next_5_days_gru_endpoint():
-    """Genera prediccion a 5 dias usando el modelo GRU."""
-    if gru_model is None or scaler is None:
-        raise HTTPException(status_code=503, detail="Modelo GRU no disponible")
+def predict_gru():
+    """Direct GRU v4 — modelo principal (alias de /predict/5days)."""
     try:
-        df = fetch_recent_ibex(days=120)
+        df         = fetch_recent_ibex(days=120)
         last_price = float(df["Close"].iloc[-1])
         last_date  = df.index[-1]
-        future_dates = pd.bdate_range(start=last_date, periods=6)[1:]
+        predictions = _predict_v4(gru_v4_model, df, n_steps=5)
+        return {
+            "modelo":        "Direct GRU v4 (MIMO)",
+            "mae_test":      141.79,
+            "ultimo_precio": round(last_price, 2),
+            "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
+            "predicciones":  _fmt_predictions(predictions, last_price, last_date),
+            "disclaimer":    "Prediccion orientativa. No constituye asesoramiento financiero.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        features = df[["Close"]].dropna()
+
+@app.get("/predict/lstm")
+def predict_lstm():
+    """Direct LSTM v4 — MIMO con log_return target (MAE=144)."""
+    try:
+        df         = fetch_recent_ibex(days=120)
+        last_price = float(df["Close"].iloc[-1])
+        last_date  = df.index[-1]
+        predictions = _predict_v4(lstm_v4_model, df, n_steps=5)
+        return {
+            "modelo":        "Direct LSTM v4 (MIMO)",
+            "mae_test":      144.35,
+            "ultimo_precio": round(last_price, 2),
+            "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
+            "predicciones":  _fmt_predictions(predictions, last_price, last_date),
+            "disclaimer":    "Prediccion orientativa. No constituye asesoramiento financiero.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/predict/attention")
+def predict_attention_endpoint():
+    """LSTM + Multi-Head Attention v4 (MAE=142)."""
+    try:
+        from src.attention_model import predict_attention
+        df         = fetch_recent_ibex(days=120)
+        last_price = float(df["Close"].iloc[-1])
+        last_date  = df.index[-1]
+
+        if attention_model is None or scaler_v4 is None:
+            raise HTTPException(status_code=503, detail="Modelo Attention no disponible")
+
+        features = _compute_features_v4(df)
         if len(features) < SEQUENCE_LENGTH:
             raise HTTPException(status_code=400, detail="Datos insuficientes")
 
-        last_60  = features.values[-SEQUENCE_LENGTH:]
-        scaled   = scaler.transform(last_60)
-        input_seq = scaled.tolist()
-
-        preds_scaled = []
-        for _ in range(5):
-            X = np.array(input_seq[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
-            p = float(gru_model.predict(X, verbose=0)[0, 0])
-            preds_scaled.append(p)
-            input_seq.append([p])
-
-        predictions = _inv_close(np.array(preds_scaled)).tolist()
-
-        result = []
-        for date, price in zip(future_dates, predictions):
-            diff = price - last_price
-            result.append({
-                "fecha":         date.strftime("%Y-%m-%d"),
-                "prediccion":    round(price, 2),
-                "variacion":     round(diff, 2),
-                "variacion_pct": round(diff / last_price * 100, 2),
-            })
-
+        last_60_scaled = scaler_v4.transform(features.values[-SEQUENCE_LENGTH:])
+        predictions    = predict_attention(attention_model, last_60_scaled,
+                                           scaler_v4, last_price)
         return {
-            "modelo":        "GRU",
+            "modelo":        "LSTM + Attention v4 (MIMO)",
+            "mae_test":      141.95,
             "ultimo_precio": round(last_price, 2),
             "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
-            "predicciones":  result,
+            "predicciones":  _fmt_predictions(predictions, last_price, last_date),
             "disclaimer":    "Prediccion orientativa. No constituye asesoramiento financiero.",
         }
     except HTTPException:
@@ -455,18 +506,23 @@ def get_regression():
 
 @app.get("/predict/horizon")
 def predict_horizon(days: int = 5):
-    """Prediccion a N dias habiles (1-10): ARIMA retrain en vivo + LSTM + GRU autoregresivos."""
-    days = max(1, min(days, 10))
+    """
+    Prediccion a N dias habiles (1-5): GRU v4 + LSTM v4 + Attention + ARIMA.
+    GRU v4 es el modelo principal (MAE=142). ARIMA es baseline estadistico.
+    """
+    days = max(1, min(days, 5))
     try:
         import warnings
         from statsmodels.tsa.arima.model import ARIMA as ARIMAModel
+        from src.attention_model import predict_attention
 
-        df = fetch_recent_ibex(days=150)
+        df         = fetch_recent_ibex(days=150)
         last_price = float(df["Close"].iloc[-1])
         last_date  = df.index[-1]
-        future_dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start=last_date, periods=days + 1)[1:]]
+        future_dates = [d.strftime("%Y-%m-%d")
+                        for d in pd.bdate_range(start=last_date, periods=days + 1)[1:]]
 
-        # ── ARIMA: retrain rapido sobre datos recientes ────────
+        # ── ARIMA: baseline estadistico ───────────────────────
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             series    = df["Close"].values.astype(float)
@@ -474,53 +530,57 @@ def predict_horizon(days: int = 5):
             arima_fc  = arima_fit.forecast(steps=days)
         arima_preds = [round(float(v), 2) for v in arima_fc]
 
-        # ── LSTM: autoregresivo N pasos ────────────────────────
-        lstm_preds = None
-        if lstm_model is not None and scaler is not None:
-            features = df[["Close"]].dropna()
-            if len(features) >= SEQUENCE_LENGTH:
-                inp = scaler.transform(features.values[-SEQUENCE_LENGTH:]).tolist()
-                ps  = []
-                for _ in range(days):
-                    X = np.array(inp[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
-                    p = float(lstm_model.predict(X, verbose=0)[0, 0])
-                    ps.append(p)
-                    inp.append([p])
-                lstm_preds = [round(v, 2) for v in _inv_close(np.array(ps)).tolist()]
+        # ── Preparar features v4 ──────────────────────────────
+        features_v4    = _compute_features_v4(df)
+        last_60_scaled = scaler_v4.transform(features_v4.values[-SEQUENCE_LENGTH:]) \
+                         if scaler_v4 and len(features_v4) >= SEQUENCE_LENGTH else None
 
-        # ── GRU: autoregresivo N pasos ─────────────────────────
+        # ── GRU v4 — principal ────────────────────────────────
         gru_preds = None
-        if gru_model is not None and scaler is not None:
-            features = df[["Close"]].dropna()
-            if len(features) >= SEQUENCE_LENGTH:
-                inp = scaler.transform(features.values[-SEQUENCE_LENGTH:]).tolist()
-                ps  = []
-                for _ in range(days):
-                    X = np.array(inp[-SEQUENCE_LENGTH:]).reshape(1, SEQUENCE_LENGTH, N_FEATURES)
-                    p = float(gru_model.predict(X, verbose=0)[0, 0])
-                    ps.append(p)
-                    inp.append([p])
-                gru_preds = [round(v, 2) for v in _inv_close(np.array(ps)).tolist()]
+        if gru_v4_model and last_60_scaled is not None:
+            from src.direct_model import predict_direct_v4
+            gru_preds = [round(v, 2) for v in
+                         predict_direct_v4(gru_v4_model, last_60_scaled,
+                                           scaler_v4, last_price)[:days]]
+
+        # ── LSTM v4 ───────────────────────────────────────────
+        lstm_preds = None
+        if lstm_v4_model and last_60_scaled is not None:
+            from src.direct_model import predict_direct_v4 as _pdv4
+            lstm_preds = [round(v, 2) for v in
+                          _pdv4(lstm_v4_model, last_60_scaled,
+                                scaler_v4, last_price)[:days]]
+
+        # ── Attention v4 ──────────────────────────────────────
+        attn_preds = None
+        if attention_model and last_60_scaled is not None:
+            attn_preds = [round(v, 2) for v in
+                          predict_attention(attention_model, last_60_scaled,
+                                            scaler_v4, last_price)[:days]]
 
         result = []
         for i, fecha in enumerate(future_dates):
             ap = arima_preds[i]
-            lp = lstm_preds[i] if lstm_preds else None
             gp = gru_preds[i]  if gru_preds  else None
+            lp = lstm_preds[i] if lstm_preds else None
+            ap2 = attn_preds[i] if attn_preds else None
             result.append({
-                "fecha":         fecha,
-                "arima":         ap,
-                "lstm":          lp,
-                "gru":           gp,
-                "arima_var_pct": round((ap - last_price) / last_price * 100, 2),
-                "lstm_var_pct":  round((lp - last_price) / last_price * 100, 2) if lp else None,
-                "gru_var_pct":   round((gp - last_price) / last_price * 100, 2) if gp else None,
+                "fecha":          fecha,
+                "gru_v4":         gp,
+                "lstm_v4":        lp,
+                "attention_v4":   ap2,
+                "arima":          ap,
+                "gru_var_pct":    round((gp  - last_price) / last_price * 100, 2) if gp  else None,
+                "lstm_var_pct":   round((lp  - last_price) / last_price * 100, 2) if lp  else None,
+                "attn_var_pct":   round((ap2 - last_price) / last_price * 100, 2) if ap2 else None,
+                "arima_var_pct":  round((ap  - last_price) / last_price * 100, 2),
             })
 
         return {
             "ultimo_precio": round(last_price, 2),
             "ultima_fecha":  last_date.strftime("%Y-%m-%d"),
             "days":          days,
+            "modelos":       ["Direct GRU v4", "Direct LSTM v4", "LSTM+Attention v4", "ARIMA"],
             "predicciones":  result,
         }
     except HTTPException:
